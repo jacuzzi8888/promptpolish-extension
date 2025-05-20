@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptPolish</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+    <div class="popup-container">
+        <div class="header">
+            <img src="icons/promptpolish_icon.png" alt="PromptPolish Logo" class="logo">
+            <h2>PromptPolish</h2>
+        </div>
+
+        <div class="setting-row toggle-container">
+             <label for="toggleOptimization" class="setting-label">Enable Optimization</label>
+             <label class="switch">
+                <input type="checkbox" id="toggleOptimization">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <div class="setting-row toggle-container">
+            <label for="toggleAutoClarify" class="setting-label">Auto-Clarify Vague Prompts</label>
+            <label class="switch">
+               <input type="checkbox" id="toggleAutoClarify">
+               <span class="slider round"></span>
+           </label>
+       </div>
+       <div class="setting-row">
+            <label for="optimizationMode" class="setting-label">Mode</label>
+            <select id="optimizationMode">
+                <option value="concise">Concise</option>
+                <option value="creative">Creative</option>
+                <option value="formal">Formal</option>
+                <option value="analyze">Analyze</option>
+                <option value="custom">Custom</option>
+            </select>
+        </div>
+
+        <div class="setting-row custom-instruction-container hidden">
+            <label for="customInstruction" class="setting-label">Custom Instruction</label>
+            <textarea id="customInstruction" placeholder="Enter custom optimization instructions... (used only when 'Custom' mode is selected)"></textarea>
+        </div>
+
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
