@@ -1,9 +1,9 @@
 /**
  * content.js for PromptPolish Chrome Extension
- * Version: v13.1 - Comparative Analysis Follow-up Actions (Reduced Comments)
+ * Version: v13.1 - Finalized Follow-up Actions (Reduced Comments)
  */
 
-console.log("PromptPolish content script loaded (v13.1 - Comparative Follow-up).");
+console.log("PromptPolish content script loaded (v13.1 - Finalized Follow-up).");
 
 // ================= Debounce Utility =================
 function debounce(func, wait) {
@@ -20,19 +20,19 @@ const ACCENT_COLOR = "#44BC95";
 const ACCENT_COLOR_DARK = "#3DAA86";
 const BORDER_COLOR = "#E2E8F0";
 const LIGHT_GREY_BG = "#F8FAFC";
-const MEDIUM_GREY_BG = "#F1F5F8";
+const MEDIUM_GREY_BG = "#F1F5F8"; 
 const TEXT_COLOR_DARK = "#1E293B";
 const TEXT_COLOR_MEDIUM = "#475569";
 const ERROR_TEXT_COLOR = "#721C24";
 const ERROR_BORDER_COLOR = "#F5C6CB";
 const ANALYSIS_TEXT_COLOR = "#004085";
 const ANALYSIS_BORDER_COLOR = "#B0E0E6";
-const CLARIFICATION_TEXT_COLOR = "#553c7b";
+const CLARIFICATION_TEXT_COLOR = "#553c7b"; 
 const CLARIFICATION_BORDER_COLOR = "#d1c4e9";
 const MIN_ELEMENT_WIDTH = 40;
 const MIN_ELEMENT_HEIGHT = 20;
-const ANALYSIS_MAX_HEIGHT = "250px";
-const ANALYSIS_FIXED_WIDTH = "380px";
+const ANALYSIS_MAX_HEIGHT = "250px"; 
+const ANALYSIS_FIXED_WIDTH = "380px"; 
 const SCROLLBAR_TRACK_COLOR = "transparent";
 const SCROLLBAR_THUMB_COLOR = "#CBD5E1";
 const SCROLLBAR_THUMB_HOVER_COLOR = "#A0AEC0";
@@ -54,7 +54,7 @@ let hideButtonTimeout = null;
 let currentOptimizeButton = null; 
 let isEnabled = true; 
 let observer = null;
-let lastOriginalUserText = ""; // Store the very first user prompt for comparison
+let lastOriginalUserText = ""; // Stores the user's very first prompt before any optimization for comparison
 
 // ================= Overlay Helper Functions =================
 function createSuggestionOverlay() {
@@ -86,15 +86,17 @@ function createSuggestionOverlay() {
     return overlay;
 }
 
-// Added originalUserTextForComparison parameter
+// Added originalUserTextForComparison parameter for the "Analyze This" follow-up
 function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestion', originalMode = '', originalUserTextForComparison = '') {
     const overlay = createSuggestionOverlay();
     overlay.style.borderLeft = 'none'; overlay.style.padding = '8px'; overlay.style.backgroundColor = '#FFFFFF'; overlay.style.color = TEXT_COLOR_DARK; overlay.style.cursor = 'default'; overlay.style.maxWidth = '400px'; overlay.style.width = 'auto';
 
-    if (resultType !== 'analysis' && resultType !== 'clarification' && resultType !== 'error') {
-        if (overlay._promptPolishHideTimer) { clearTimeout(overlay._promptPolishHideTimer); overlay._promptPolishHideTimer = null; }
+    // Clear auto-hide timer only if it's not an error, analysis, or clarification overlay
+    if (resultType === 'suggestion' && overlay._promptPolishHideTimer) { 
+        clearTimeout(overlay._promptPolishHideTimer); 
+        overlay._promptPolishHideTimer = null; 
     }
-    if (resultType === 'error' && overlay._promptPolishHideTimer) { 
+     if (resultType === 'error' && overlay._promptPolishHideTimer) { // Clear previous error timer if any
         clearTimeout(overlay._promptPolishHideTimer);
     }
 
@@ -163,14 +165,14 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
             }); 
             overlay.appendChild(list);
 
-            if (suggestions.length > 0) {
+            if (suggestions.length > 0 && originalUserTextForComparison) { // Only show follow-ups if there's an original text to compare or re-process
                 const followUpContainer = document.createElement('div');
                 followUpContainer.className = 'promptpolish-follow-up-actions';
                 Object.assign(followUpContainer.style, { padding: '8px 12px 4px', borderTop: `1px solid ${BORDER_COLOR}`, marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap'});
 
                 const actions = [
                     { label: "Make Formal", mode: "formal" }, { label: "More Creative", mode: "creative" },
-                    { label: "More Concise", mode: "concise" }, { label: "Analyze This", mode: "analyze_comparison" } // Use new mode
+                    { label: "More Concise", mode: "concise" }, { label: "Why is this better?", mode: "analyze_comparison" } 
                 ];
 
                 actions.forEach(action => {
@@ -181,19 +183,19 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
                     button.innerHTML = `${RECYCLE_SVG} ${action.label}`;
                     button.onclick = (e) => {
                         e.stopPropagation();
-                        const textToReProcess = suggestions[0]; 
+                        const currentSuggestionText = suggestions[0]; 
                         hideSuggestionOverlay(); 
                         if (currentOptimizeButton && currentOptimizeButton.inputElement && currentOptimizeButton.button) {
                             if (action.mode === "analyze_comparison") {
-                                // For comparative analysis, inputText is original, customInstruction is the optimized one
-                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, originalUserTextForComparison, action.mode, textToReProcess);
+                                // inputText = original, customInstruction = current suggestion
+                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, originalUserTextForComparison, action.mode, currentSuggestionText);
                             } else {
-                                // For other follow-ups, initialText is the current suggestion
-                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, textToReProcess, action.mode, null);
+                                // initialText = current suggestion
+                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, currentSuggestionText, action.mode, null);
                             }
                         } else {
                             console.warn("Cannot re-process: currentOptimizeButton or its elements are not defined.");
-                            showOverlayNearButton(inputElement, "Error: Could not initiate follow-up action. Please try optimizing again.", "error");
+                            showOverlayNearButton(inputElement, "Error: Could not initiate follow-up action.", "error", "", ""); // Pass empty strings for modes
                         }
                     };
                     followUpContainer.appendChild(button);
@@ -250,7 +252,6 @@ function isPromptVague(text) {
     return words.length < VAGUE_PROMPT_WORD_THRESHOLD;
 }
 
-// Added customInstructionForFollowUp to payload for analyze_comparison
 async function callBackgroundForOptimization(text, mode, customInstructionPayload, isClarifyRequest = false) {
     return new Promise((resolve, reject) => {
         if (!chrome.runtime?.sendMessage) return reject(new Error("Messaging API unavailable."));
@@ -260,7 +261,7 @@ async function callBackgroundForOptimization(text, mode, customInstructionPayloa
                 payload: { 
                     inputText: text, 
                     mode: mode, 
-                    customInstruction: customInstructionPayload, // This will carry the optimized prompt for 'analyze_comparison'
+                    customInstruction: customInstructionPayload,
                     isClarifyRequest: isClarifyRequest 
                 } 
             },
@@ -277,21 +278,26 @@ async function callBackgroundForOptimization(text, mode, customInstructionPayloa
     });
 }
 
-// Modified to accept optional initialText, initialMode, and customInstructionForFollowUp
 async function handleOptimizationRequest(inputElement, buttonElement, initialText = null, initialMode = null, customInstructionForFollowUp = null) {
-    let userTextForRequest; // This will be the primary text sent as 'inputText' to the worker
-    let customInstructionPayload; // This will be sent as 'customInstruction' to the worker
+    let userTextForRequest; 
+    let customInstructionPayloadForWorker;
+    let originalTextForThisRequestCycle; // To pass to showSuggestionOverlay for follow-ups
 
     if (initialMode === "analyze_comparison") {
-        userTextForRequest = initialText; // The original user prompt
-        customInstructionPayload = customInstructionForFollowUp; // The AI-optimized prompt
-    } else if (initialText !== null) {
-        userTextForRequest = initialText; // The current AI-optimized prompt for other follow-ups
-        customInstructionPayload = (await getSettings()).customInstruction; // Standard custom instruction from settings
-    } else {
+        userTextForRequest = initialText; // This is the originalUserText passed from follow-up
+        customInstructionPayloadForWorker = customInstructionForFollowUp; // This is the current AI suggestion
+        originalTextForThisRequestCycle = initialText; // Keep track of the ultimate original
+    } else if (initialText !== null) { // Other follow-up actions
+        userTextForRequest = initialText; // This is the current AI suggestion
+        const settingsForCustom = await getSettings(); // Need settings for 'custom' mode follow-up
+        customInstructionPayloadForWorker = (initialMode === "custom") ? settingsForCustom.customInstruction : "";
+        originalTextForThisRequestCycle = lastOriginalUserText; // Use the stored original for potential further "analyze_comparison"
+    } else { // Initial optimization request
         userTextForRequest = (inputElement.isContentEditable) ? inputElement.innerText.trim() : inputElement.value.trim();
-        lastOriginalUserText = userTextForRequest; // Store the very first user prompt
-        customInstructionPayload = (await getSettings()).customInstruction; // Standard custom instruction
+        lastOriginalUserText = userTextForRequest; // Capture the very first user prompt
+        originalTextForThisRequestCycle = userTextForRequest;
+        const settingsForCustom = await getSettings();
+        customInstructionPayloadForWorker = settingsForCustom.customInstruction; 
     }
 
     const originalButtonContent = buttonElement.innerHTML;
@@ -303,71 +309,74 @@ async function handleOptimizationRequest(inputElement, buttonElement, initialTex
     if (isFloatingButton) { buttonElement.textContent = "Processing..."; buttonElement.style.backgroundColor = "#aaa"; buttonElement.style.boxShadow = "none"; } 
     else { buttonElement.innerHTML = LOADING_SPINNER_SVG; }
     
-    if (initialText === null || initialMode !== "analyze_comparison") { // Don't hide for analyze_comparison follow-up as it's a new analysis
+    // Only hide overlay for initial requests, not for follow-ups that originate from the overlay.
+    if (initialText === null) {
         hideSuggestionOverlay(); 
     }
 
     try {
-        const settings = await getSettings(); // Still need this for autoClarifyEnabled and default customInstruction
+        const settings = await getSettings(); 
         let effectiveMode = initialMode || settings.mode;
         let isClarifyRequest = false;
 
-        if (initialText === null && effectiveMode !== 'analyze' && settings.autoClarifyEnabled && isPromptVague(userTextForRequest)) {
+        // Clarify logic only applies if it's an initial request (not a follow-up) and not analysis/comparison
+        if (initialText === null && effectiveMode !== 'analyze' && effectiveMode !== 'analyze_comparison' && settings.autoClarifyEnabled && isPromptVague(userTextForRequest)) {
             effectiveMode = "clarify";
             isClarifyRequest = true;
-        } else if (!userTextForRequest && effectiveMode !== 'analyze' && effectiveMode !== 'clarify' && effectiveMode !== 'analyze_comparison') {
-            showSuggestionOverlay(inputElement, "Input is empty. Please type a prompt.", 'error', effectiveMode, lastOriginalUserText);
+        } else if (!userTextForRequest && !['analyze', 'clarify', 'analyze_comparison'].includes(effectiveMode) ) {
+            showSuggestionOverlay(inputElement, "Input is empty. Please type a prompt.", 'error', effectiveMode, originalTextForThisRequestCycle);
             buttonElement.disabled = false; buttonElement.style.opacity = '1'; buttonElement.style.cursor = 'pointer'; buttonElement.style.pointerEvents = 'auto';
             if (isFloatingButton) { buttonElement.textContent = originalButtonText; buttonElement.style.backgroundColor = ACCENT_COLOR; buttonElement.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)"; }
             else { buttonElement.innerHTML = originalButtonContent; }
             return;
         }
         
-        // For analyze_comparison, customInstructionPayload is already set to the optimized prompt.
-        // For other modes, use settings.customInstruction if effectiveMode is 'custom'.
-        let finalCustomInstruction = (effectiveMode === "analyze_comparison") 
-                                     ? customInstructionPayload 
-                                     : (effectiveMode === "custom" ? settings.customInstruction : "");
-
-        const response = await callBackgroundForOptimization(userTextForRequest, effectiveMode, finalCustomInstruction, isClarifyRequest);
+        // Determine final custom instruction to send to worker
+        let finalCustomInstructionForWorker;
+        if (effectiveMode === "analyze_comparison") {
+            finalCustomInstructionForWorker = customInstructionPayloadForWorker; // Already set to the optimized prompt
+        } else if (effectiveMode === "custom") {
+            finalCustomInstructionForWorker = customInstructionPayloadForWorker || settings.customInstruction;
+        } else {
+            finalCustomInstructionForWorker = ""; // Not a custom mode or analyze_comparison
+        }
         
-        const displayType = response.type || (isClarifyRequest ? 'clarification' : (effectiveMode === 'analyze' || effectiveMode === 'analyze_comparison' ? 'analysis' : 'suggestion'));
-        const textForOverlayComparison = (effectiveMode === "analyze_comparison" || (initialText === null && displayType === 'suggestion')) ? lastOriginalUserText : '';
-
-
+        const response = await callBackgroundForOptimization(userTextForRequest, effectiveMode, finalCustomInstructionForWorker, isClarifyRequest);
+        
+        const displayType = response.type || (isClarifyRequest ? 'clarification' : (['analyze', 'analyze_comparison'].includes(effectiveMode) ? 'analysis' : 'suggestion'));
+        
         if (displayType === 'analysis' || displayType === 'clarification') {
-            showSuggestionOverlay(inputElement, response.data, displayType, effectiveMode, textForOverlayComparison);
+            showSuggestionOverlay(inputElement, response.data, displayType, effectiveMode, originalTextForThisRequestCycle);
         } else if (response.data) {
             const suggestions = Array.isArray(response.data) ? response.data : [response.data];
-            const currentInputTextForFilter = (inputElement.isContentEditable ? inputElement.innerText.trim() : inputElement.value.trim());
-            
             const validSuggestions = (initialText !== null && effectiveMode !== "analyze_comparison") 
-                ? suggestions // For most follow-ups, show the direct result
-                : suggestions.filter(text => text !== userTextForRequest); // For initial opt or comparison, filter if same as input
+                ? suggestions 
+                : suggestions.filter(text => text !== userTextForRequest);
             
             if (validSuggestions.length > 0) {
-                showSuggestionOverlay(inputElement, validSuggestions, 'suggestion', effectiveMode, textForOverlayComparison);
+                showSuggestionOverlay(inputElement, validSuggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
             } else if (suggestions.length > 0 && suggestions[0] === userTextForRequest && initialText === null) { 
-                 showSuggestionOverlay(inputElement, "No significant changes suggested by AI.", 'analysis', effectiveMode, textForOverlayComparison);
-            } else if (suggestions.length > 0 && initialText !== null) { // For follow-up, show even if same as the text re-processed
-                showSuggestionOverlay(inputElement, suggestions, 'suggestion', effectiveMode, textForOverlayComparison);
-            }
-            else {
-                showSuggestionOverlay(inputElement, "No different suggestions found or AI returned empty.", 'error', effectiveMode, textForOverlayComparison);
+                 showSuggestionOverlay(inputElement, "No significant changes suggested by AI.", 'analysis', effectiveMode, originalTextForThisRequestCycle);
+            } else if (suggestions.length > 0 && initialText !== null) {
+                showSuggestionOverlay(inputElement, suggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
+            } else {
+                showSuggestionOverlay(inputElement, "No different suggestions found or AI returned empty.", 'error', effectiveMode, originalTextForThisRequestCycle);
             }
         } else {
-             showSuggestionOverlay(inputElement, "Received no data from the AI.", 'error', effectiveMode, textForOverlayComparison);
+             showSuggestionOverlay(inputElement, "Received no data from the AI.", 'error', effectiveMode, originalTextForThisRequestCycle);
         }
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        const currentModeForError = initialMode || (await getSettings()).mode;
+        const currentModeForError = initialMode || (await getSettings()).mode; // Fallback for error display
+        const originalTextForError = initialText === null ? lastOriginalUserText : originalTextForThisRequestCycle;
+
         if (errorMsg.includes("Could not establish connection") || errorMsg.includes("Connection failed")) {
-            showSuggestionOverlay(inputElement, "Error: Connection to background service failed. Please reload the page or extension.", 'error', currentModeForError, lastOriginalUserText);
+            showSuggestionOverlay(inputElement, "Error: Connection to background service failed. Please reload the page or extension.", 'error', currentModeForError, originalTextForError);
         } else if (errorMsg.includes("Worker URL missing")) {
-             showSuggestionOverlay(inputElement, "Error: Extension configuration issue. Please contact support.", 'error', currentModeForError, lastOriginalUserText);
+             showSuggestionOverlay(inputElement, "Error: Extension configuration issue. Please contact support.", 'error', currentModeForError, originalTextForError);
         } else {
-            showSuggestionOverlay(inputElement, `Operation failed: ${errorMsg}`, 'error', currentModeForError, lastOriginalUserText);
+            showSuggestionOverlay(inputElement, `Operation failed: ${errorMsg}`, 'error', currentModeForError, originalTextForError);
         }
         console.error("[PromptPolish] Operation failed:", error);
     } finally {
@@ -614,19 +623,20 @@ function injectFloatingButtonForChatGPT() {
         button.addEventListener("click", async (e) => {
             e.preventDefault(); e.stopPropagation();
             const currentInputElement = document.querySelector('textarea[id="prompt-textarea"], textarea[data-id="root"]');
-            if (!currentInputElement) { showOverlayNearButton(button, "Could not find the text area to optimize.", 'error'); return; }
+            if (!currentInputElement) { showOverlayNearButton(button, "Could not find the text area to optimize.", 'error', '', ''); return; } // Pass empty originalUserTextForComparison
             await handleOptimizationRequest(currentInputElement, button, null, null, null); 
         });
         floatContainer.appendChild(button); document.body.appendChild(floatContainer);
     }
 }
 
-function showOverlayNearButton(buttonElement, message, type) { 
+// Updated to accept and pass originalUserTextForComparison
+function showOverlayNearButton(buttonElement, message, type, originalMode = '', originalUserTextForComparison = '') { 
     const rect = buttonElement.getBoundingClientRect();
     const pseudoInputElement = { 
         getBoundingClientRect: () => rect,
         isContentEditable: false, 
         value: '' 
     };
-    showSuggestionOverlay(pseudoInputElement, message, type, '', ''); // Pass empty originalUserTextForComparison
+    showSuggestionOverlay(pseudoInputElement, message, type, originalMode, originalUserTextForComparison);
 }
