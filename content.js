@@ -1,9 +1,80 @@
 /**
  * content.js for PromptPolish Chrome Extension
- * Version: v13.1 - Finalized Follow-up Actions (Reduced Comments)
+ * Version: v16.1 - Bug Fix
+ * - Fixed a recursive loop in the showOverlayNearButton function that caused script crashes.
+ * - All other features (Custom Rules, Diff View, Retry, Fade Logic) are retained.
  */
 
-console.log("PromptPolish content script loaded (v13.1 - Finalized Follow-up).");
+console.log("PromptPolish content script loaded (v16.1 - Bug Fix).");
+
+// ================= State Variables =================
+let customRules = []; // To store user-defined rules
+const managedInputs = new WeakMap();
+let currentActiveButton = null; 
+let isEnabled = true; 
+let observer = null;
+let lastOriginalUserText = "";
+
+// ================= Diff Utility =================
+function generateDiffHtml(oldStr, newStr) {
+    const oldWords = oldStr.split(/(\s+)/);
+    const newWords = newStr.split(/(\s+)/);
+    let i = 0, j = 0;
+    const result = [];
+
+    while (i < oldWords.length || j < newWords.length) {
+        if (i < oldWords.length && j < newWords.length && oldWords[i] === newWords[j]) {
+            result.push(oldWords[i]);
+            i++;
+            j++;
+        } else {
+            const delBuffer = [];
+            const insBuffer = [];
+            
+            let syncPoint = -1;
+            for (let k = i; k < oldWords.length; k++) {
+                const idx = newWords.indexOf(oldWords[k], j);
+                if (idx !== -1) {
+                    syncPoint = idx;
+                    for (let l = i; l < k; l++) {
+                        delBuffer.push(oldWords[l]);
+                    }
+                    break;
+                }
+            }
+
+            if (syncPoint !== -1) {
+                for (let k = j; k < syncPoint; k++) {
+                    insBuffer.push(newWords[k]);
+                }
+            } else {
+                for (let k = i; k < oldWords.length; k++) {
+                    delBuffer.push(oldWords[k]);
+                }
+                for (let k = j; k < newWords.length; k++) {
+                    insBuffer.push(newWords[k]);
+                }
+            }
+            
+            if (delBuffer.length > 0) {
+                result.push(`<del>${delBuffer.join('')}</del>`);
+            }
+            if (insBuffer.length > 0) {
+                result.push(`<ins>${insBuffer.join('')}</ins>`);
+            }
+            
+            if (syncPoint !== -1) {
+                 i += delBuffer.length;
+                 j += insBuffer.length;
+            } else {
+                 i = oldWords.length;
+                 j = newWords.length;
+            }
+        }
+    }
+    return result.join('');
+}
+
 
 // ================= Debounce Utility =================
 function debounce(func, wait) {
@@ -24,6 +95,7 @@ const MEDIUM_GREY_BG = "#F1F5F8";
 const TEXT_COLOR_DARK = "#1E293B";
 const TEXT_COLOR_MEDIUM = "#475569";
 const ERROR_TEXT_COLOR = "#721C24";
+const ERROR_BG_COLOR = "#F8D7DA";
 const ERROR_BORDER_COLOR = "#F5C6CB";
 const ANALYSIS_TEXT_COLOR = "#004085";
 const ANALYSIS_BORDER_COLOR = "#B0E0E6";
@@ -38,6 +110,7 @@ const SCROLLBAR_THUMB_COLOR = "#CBD5E1";
 const SCROLLBAR_THUMB_HOVER_COLOR = "#A0AEC0";
 const SCROLLBAR_WIDTH = "6px";
 const VAGUE_PROMPT_WORD_THRESHOLD = 5;
+const FADE_BUTTON_DELAY = 3000;
 
 // SVG Icons
 const MAGIC_WAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M14 9l1-1"/><path d="M17 11l1-1"/><path d="M9 4l1-1"/><path d="M12 6l1-1"/><path d="M3 21l9-9"/><path d="M15 16l-4 4h6v-2Z"/></svg>`;
@@ -47,14 +120,6 @@ const QUESTION_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height=
 const DISMISS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 const LOADING_SPINNER_SVG = `<svg width="14" height="14" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" fill="${TEXT_COLOR_MEDIUM}"><path d="M73,50c0-12.7-10.3-23-23-23S27,37.3,27,50 M30.9,50c0-10.5,8.5-19.1,19.1-19.1S69.1,39.5,69.1,50"><animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="1s" from="0 50 50" to="360 50 50" repeatCount="indefinite"></animateTransform></path></svg>`;
 const RECYCLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`;
-
-// ================= State Variables =================
-const managedInputs = new Map();
-let hideButtonTimeout = null;
-let currentOptimizeButton = null; 
-let isEnabled = true; 
-let observer = null;
-let lastOriginalUserText = ""; // Stores the user's very first prompt before any optimization for comparison
 
 // ================= Overlay Helper Functions =================
 function createSuggestionOverlay() {
@@ -80,25 +145,12 @@ function createSuggestionOverlay() {
     const dismissButtonStored = overlay.querySelector('button[aria-label="Dismiss"]');
     overlay.innerHTML = '';
     if (dismissButtonStored) { overlay.appendChild(dismissButtonStored); }
-    else { 
-        const newDismissButton = document.createElement("button"); newDismissButton.innerHTML = DISMISS_SVG; Object.assign(newDismissButton.style, { position: "absolute", top: "6px", right: "6px", width: "20px", height: "20px", padding: "0", border: "none", background: "none", color: TEXT_COLOR_MEDIUM, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", transition: "background-color 0.15s ease, color 0.15s ease" }); newDismissButton.ariaLabel = "Dismiss"; newDismissButton.onmouseover = () => { newDismissButton.style.backgroundColor = LIGHT_GREY_BG; newDismissButton.style.color = TEXT_COLOR_DARK; }; newDismissButton.onmouseout = () => { newDismissButton.style.backgroundColor = "transparent"; newDismissButton.style.color = TEXT_COLOR_MEDIUM; }; newDismissButton.addEventListener("click", (e) => { e.stopPropagation(); hideSuggestionOverlay(); }); overlay.appendChild(newDismissButton);
-    }
     return overlay;
 }
 
-// Added originalUserTextForComparison parameter for the "Analyze This" follow-up
-function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestion', originalMode = '', originalUserTextForComparison = '') {
+function showSuggestionOverlay(inputElement, buttonElement, resultData, resultType = 'suggestion', originalMode = '', originalUserTextForComparison = '') {
     const overlay = createSuggestionOverlay();
     overlay.style.borderLeft = 'none'; overlay.style.padding = '8px'; overlay.style.backgroundColor = '#FFFFFF'; overlay.style.color = TEXT_COLOR_DARK; overlay.style.cursor = 'default'; overlay.style.maxWidth = '400px'; overlay.style.width = 'auto';
-
-    // Clear auto-hide timer only if it's not an error, analysis, or clarification overlay
-    if (resultType === 'suggestion' && overlay._promptPolishHideTimer) { 
-        clearTimeout(overlay._promptPolishHideTimer); 
-        overlay._promptPolishHideTimer = null; 
-    }
-     if (resultType === 'error' && overlay._promptPolishHideTimer) { // Clear previous error timer if any
-        clearTimeout(overlay._promptPolishHideTimer);
-    }
 
     switch (resultType) {
         case 'error': {
@@ -108,7 +160,20 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
             const textContainer = document.createElement('div'); textContainer.style.flexGrow = '1';
             const displayData = resultData || "An unknown error occurred.";
             textContainer.innerHTML = `<strong style="color: ${textColor};">${title}</strong><br>${String(displayData).replace(/\n/g, '<br>')}`;
-            container.appendChild(iconContainer); container.appendChild(textContainer); overlay.appendChild(container);
+            container.appendChild(iconContainer); container.appendChild(textContainer);
+
+            const retryButton = document.createElement('button');
+            retryButton.textContent = "Retry";
+            retryButton.className = 'promptpolish-retry-btn';
+            retryButton.onclick = (e) => {
+                e.stopPropagation();
+                hideSuggestionOverlay();
+                handleOptimizationRequest(inputElement, buttonElement, originalUserTextForComparison, originalMode, null);
+            };
+            textContainer.appendChild(document.createElement('br'));
+            textContainer.appendChild(retryButton);
+
+            overlay.appendChild(container);
             overlay.style.borderLeft = `4px solid ${borderColor}`; overlay.style.paddingLeft = '0'; container.style.paddingLeft = '12px';
             overlay.dataset.activeType = resultType;
             break;
@@ -143,19 +208,26 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
             const list = document.createElement("ol"); list.style.listStyle = "none"; list.style.margin = "0"; list.style.padding = "4px";
             
             suggestions.forEach((suggestionText, index) => {
-                const listItem = document.createElement("li"); listItem.style.padding = "10px 12px"; listItem.style.cursor = "pointer"; listItem.style.borderRadius = "6px"; listItem.style.transition = "background-color 0.15s ease"; listItem.style.display = 'flex'; listItem.style.alignItems = 'flex-start'; listItem.style.gap = '8px'; const numberSpan = document.createElement('span'); numberSpan.textContent = `${index + 1}.`; numberSpan.style.fontWeight = '500'; numberSpan.style.color = TEXT_COLOR_MEDIUM; numberSpan.style.minWidth = '15px'; numberSpan.style.textAlign = 'right'; const textSpan = document.createElement('span'); textSpan.textContent = suggestionText; textSpan.style.flexGrow = '1'; listItem.appendChild(numberSpan); listItem.appendChild(textSpan); if (index < suggestions.length - 1) { listItem.style.borderBottom = `1px solid ${BORDER_COLOR}`; } listItem.onmouseover = () => { listItem.style.backgroundColor = MEDIUM_GREY_BG; }; listItem.onmouseout = () => { listItem.style.backgroundColor = "transparent"; };
+                const listItem = document.createElement("li");
+                listItem.style.padding = "10px 12px"; listItem.style.cursor = "pointer"; listItem.style.borderRadius = "6px"; listItem.style.transition = "background-color 0.15s ease"; listItem.style.display = 'flex'; listItem.style.alignItems = 'flex-start'; listItem.style.gap = '8px'; const numberSpan = document.createElement('span'); numberSpan.textContent = `${index + 1}.`; numberSpan.style.fontWeight = '500'; numberSpan.style.color = TEXT_COLOR_MEDIUM; numberSpan.style.minWidth = '15px'; numberSpan.style.textAlign = 'right'; const textSpan = document.createElement('span'); textSpan.textContent = suggestionText; textSpan.style.flexGrow = '1'; listItem.appendChild(numberSpan); listItem.appendChild(textSpan); if (index < suggestions.length - 1) { listItem.style.borderBottom = `1px solid ${BORDER_COLOR}`; } listItem.onmouseover = () => { listItem.style.backgroundColor = MEDIUM_GREY_BG; }; listItem.onmouseout = () => { listItem.style.backgroundColor = "transparent"; };
+                
                 listItem.addEventListener("click", (e) => { 
                     e.stopPropagation(); 
-                    if (inputElement.isContentEditable) { 
-                        inputElement.focus(); 
+                    if (inputElement.isContentEditable) {
+                        inputElement.focus();
+                        const range = document.createRange();
+                        range.selectNodeContents(inputElement);
                         const selection = window.getSelection();
-                        if (selection && selection.rangeCount > 0) {
-                            const range = selection.getRangeAt(0);
-                            if (inputElement.contains(range.commonAncestorContainer)) {
-                                range.deleteContents(); range.insertNode(document.createTextNode(suggestionText)); range.collapse(false); selection.removeAllRanges(); selection.addRange(range);
-                            } else { inputElement.innerText = suggestionText; }
-                        } else { inputElement.innerText = suggestionText; }
-                    } else { inputElement.value = suggestionText; } 
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(suggestionText));
+                        range.collapse(false);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                    } else { 
+                        inputElement.value = suggestionText; 
+                    } 
                     inputElement.focus(); 
                     const inputEvent = new Event('input', { bubbles: true, composed: true }); 
                     inputElement.dispatchEvent(inputEvent); 
@@ -165,7 +237,35 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
             }); 
             overlay.appendChild(list);
 
-            if (suggestions.length > 0 && originalUserTextForComparison) { // Only show follow-ups if there's an original text to compare or re-process
+            if (suggestions.length > 0 && originalUserTextForComparison && originalUserTextForComparison !== suggestions[0]) {
+                const diffContainer = document.createElement('div');
+                diffContainer.className = 'promptpolish-diff-container';
+                diffContainer.style.display = 'none';
+                diffContainer.style.padding = '8px 12px';
+                diffContainer.style.borderTop = `1px solid ${BORDER_COLOR}`;
+                diffContainer.style.marginTop = '8px';
+
+                const diffContent = document.createElement('div');
+                diffContent.className = 'promptpolish-diff-view';
+                diffContent.innerHTML = generateDiffHtml(originalUserTextForComparison, suggestions[0]);
+                diffContainer.appendChild(diffContent);
+                
+                const diffToggle = document.createElement('button');
+                diffToggle.textContent = 'Compare Changes';
+                diffToggle.className = 'promptpolish-diff-toggle';
+                diffToggle.onclick = (e) => {
+                    e.stopPropagation();
+                    const isHidden = diffContainer.style.display === 'none';
+                    diffContainer.style.display = isHidden ? 'block' : 'none';
+                    diffToggle.textContent = isHidden ? 'Hide Changes' : 'Compare Changes';
+                };
+                
+                overlay.appendChild(diffToggle);
+                overlay.appendChild(diffContainer);
+            }
+
+
+            if (suggestions.length > 0 && originalUserTextForComparison) {
                 const followUpContainer = document.createElement('div');
                 followUpContainer.className = 'promptpolish-follow-up-actions';
                 Object.assign(followUpContainer.style, { padding: '8px 12px 4px', borderTop: `1px solid ${BORDER_COLOR}`, marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap'});
@@ -185,17 +285,18 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
                         e.stopPropagation();
                         const currentSuggestionText = suggestions[0]; 
                         hideSuggestionOverlay(); 
-                        if (currentOptimizeButton && currentOptimizeButton.inputElement && currentOptimizeButton.button) {
+                        
+                        const buttonToAnimate = managedInputs.get(inputElement)?.button || currentActiveButton;
+
+                        if (buttonToAnimate && inputElement) {
                             if (action.mode === "analyze_comparison") {
-                                // inputText = original, customInstruction = current suggestion
-                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, originalUserTextForComparison, action.mode, currentSuggestionText);
+                                handleOptimizationRequest(inputElement, buttonToAnimate, originalUserTextForComparison, action.mode, currentSuggestionText);
                             } else {
-                                // initialText = current suggestion
-                                handleOptimizationRequest(currentOptimizeButton.inputElement, currentOptimizeButton.button, currentSuggestionText, action.mode, null);
+                                handleOptimizationRequest(inputElement, buttonToAnimate, currentSuggestionText, action.mode, null);
                             }
                         } else {
-                            console.warn("Cannot re-process: currentOptimizeButton or its elements are not defined.");
-                            showOverlayNearButton(inputElement, "Error: Could not initiate follow-up action.", "error", "", ""); // Pass empty strings for modes
+                            console.warn("Cannot re-process: context not found.");
+                            showOverlayNearButton(buttonElement, "Error: Could not initiate follow-up action.", "error");
                         }
                     };
                     followUpContainer.appendChild(button);
@@ -210,25 +311,16 @@ function showSuggestionOverlay(inputElement, resultData, resultType = 'suggestio
 
     const rect = inputElement.getBoundingClientRect(); const viewportWidth = window.innerWidth; const viewportHeight = window.innerHeight; let leftPosition = window.scrollX + rect.left; let topPosition = window.scrollY + rect.bottom + 5; overlay.style.visibility = 'hidden'; overlay.style.display = 'block'; const overlayWidth = overlay.offsetWidth; const overlayHeight = overlay.offsetHeight; overlay.style.display = 'none'; overlay.style.visibility = 'visible';
     if (leftPosition + overlayWidth > viewportWidth - 10) { leftPosition = viewportWidth - overlayWidth - 10; } if (leftPosition < 10) { leftPosition = 10; } if (topPosition + overlayHeight > viewportHeight + window.scrollY - 10 && rect.top - overlayHeight - 5 > window.scrollY) { topPosition = window.scrollY + rect.top - overlayHeight - 5; } else if (topPosition + overlayHeight > viewportHeight + window.scrollY - 10) { topPosition = window.scrollY + 10; } if (topPosition < window.scrollY + 10) { topPosition = window.scrollY + 10; }
-    overlay.style.top = topPosition + "px"; overlay.style.left = leftPosition + "px"; overlay.style.display = "block";
-
-    const handlerKey = '_promptPolishOutsideClickHandler'; if (document[handlerKey]) { document.removeEventListener("click", document[handlerKey], true); }
-    document[handlerKey] = function (e) {
-        const overlayElement = document.getElementById("promptpolish-suggestion-overlay");
-        const activeInputElement = currentOptimizeButton?.inputElement;
-        const isClickInsideOverlay = overlayElement && overlayElement.contains(e.target);
-        const isClickOnActiveInput = activeInputElement && activeInputElement === e.target;
-        const isClickOnAnyOptimizeButton = e.target.closest('.promptpolish-optimize-btn, #promptpolish-chatgpt-float-btn button, .promptpolish-follow-up-btn');
-        if (!isClickInsideOverlay && !isClickOnActiveInput && !isClickOnAnyOptimizeButton) {
-            hideSuggestionOverlay();
-        }
-    };
-    document.addEventListener("click", document[handlerKey], true);
+    overlay.style.top = topPosition + "px";
+    overlay.style.left = leftPosition + "px";
+    overlay.style.display = "block";
 }
 
 function hideSuggestionOverlay() {
     const overlay = document.getElementById("promptpolish-suggestion-overlay");
-    if (overlay) { overlay.style.display = "none"; const handlerKey = '_promptPolishOutsideClickHandler'; if (document[handlerKey]) { document.removeEventListener("click", document[handlerKey], true); delete document[handlerKey]; } if (overlay._promptPolishHideTimer) { clearTimeout(overlay._promptPolishHideTimer); overlay._promptPolishHideTimer = null; } }
+    if (overlay) { 
+        overlay.style.display = "none"; 
+    }
 }
 
 // ================= Message Passing Logic =================
@@ -281,20 +373,20 @@ async function callBackgroundForOptimization(text, mode, customInstructionPayloa
 async function handleOptimizationRequest(inputElement, buttonElement, initialText = null, initialMode = null, customInstructionForFollowUp = null) {
     let userTextForRequest; 
     let customInstructionPayloadForWorker;
-    let originalTextForThisRequestCycle; // To pass to showSuggestionOverlay for follow-ups
+    let originalTextForThisRequestCycle;
 
     if (initialMode === "analyze_comparison") {
-        userTextForRequest = initialText; // This is the originalUserText passed from follow-up
-        customInstructionPayloadForWorker = customInstructionForFollowUp; // This is the current AI suggestion
-        originalTextForThisRequestCycle = initialText; // Keep track of the ultimate original
-    } else if (initialText !== null) { // Other follow-up actions
-        userTextForRequest = initialText; // This is the current AI suggestion
-        const settingsForCustom = await getSettings(); // Need settings for 'custom' mode follow-up
+        userTextForRequest = initialText;
+        customInstructionPayloadForWorker = customInstructionForFollowUp;
+        originalTextForThisRequestCycle = initialText;
+    } else if (initialText !== null) {
+        userTextForRequest = initialText;
+        const settingsForCustom = await getSettings();
         customInstructionPayloadForWorker = (initialMode === "custom") ? settingsForCustom.customInstruction : "";
-        originalTextForThisRequestCycle = lastOriginalUserText; // Use the stored original for potential further "analyze_comparison"
-    } else { // Initial optimization request
+        originalTextForThisRequestCycle = lastOriginalUserText;
+    } else {
         userTextForRequest = (inputElement.isContentEditable) ? inputElement.innerText.trim() : inputElement.value.trim();
-        lastOriginalUserText = userTextForRequest; // Capture the very first user prompt
+        lastOriginalUserText = userTextForRequest;
         originalTextForThisRequestCycle = userTextForRequest;
         const settingsForCustom = await getSettings();
         customInstructionPayloadForWorker = settingsForCustom.customInstruction; 
@@ -304,12 +396,10 @@ async function handleOptimizationRequest(inputElement, buttonElement, initialTex
     const originalButtonText = buttonElement.textContent;
     const isFloatingButton = buttonElement.closest('#promptpolish-chatgpt-float-btn');
     
-    buttonElement.disabled = true; buttonElement.style.opacity = '0.7'; buttonElement.style.cursor = 'wait'; buttonElement.style.pointerEvents = 'none';
-
+    buttonElement.disabled = true; buttonElement.style.opacity = '0.7'; buttonElement.style.cursor = 'wait';
     if (isFloatingButton) { buttonElement.textContent = "Processing..."; buttonElement.style.backgroundColor = "#aaa"; buttonElement.style.boxShadow = "none"; } 
     else { buttonElement.innerHTML = LOADING_SPINNER_SVG; }
     
-    // Only hide overlay for initial requests, not for follow-ups that originate from the overlay.
     if (initialText === null) {
         hideSuggestionOverlay(); 
     }
@@ -319,68 +409,64 @@ async function handleOptimizationRequest(inputElement, buttonElement, initialTex
         let effectiveMode = initialMode || settings.mode;
         let isClarifyRequest = false;
 
-        // Clarify logic only applies if it's an initial request (not a follow-up) and not analysis/comparison
         if (initialText === null && effectiveMode !== 'analyze' && effectiveMode !== 'analyze_comparison' && settings.autoClarifyEnabled && isPromptVague(userTextForRequest)) {
             effectiveMode = "clarify";
             isClarifyRequest = true;
         } else if (!userTextForRequest && !['analyze', 'clarify', 'analyze_comparison'].includes(effectiveMode) ) {
-            showSuggestionOverlay(inputElement, "Input is empty. Please type a prompt.", 'error', effectiveMode, originalTextForThisRequestCycle);
-            buttonElement.disabled = false; buttonElement.style.opacity = '1'; buttonElement.style.cursor = 'pointer'; buttonElement.style.pointerEvents = 'auto';
-            if (isFloatingButton) { buttonElement.textContent = originalButtonText; buttonElement.style.backgroundColor = ACCENT_COLOR; buttonElement.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)"; }
-            else { buttonElement.innerHTML = originalButtonContent; }
+            showSuggestionOverlay(inputElement, buttonElement, "Input is empty. Please type a prompt.", 'error', effectiveMode, originalTextForThisRequestCycle);
             return;
         }
         
-        // Determine final custom instruction to send to worker
         let finalCustomInstructionForWorker;
         if (effectiveMode === "analyze_comparison") {
-            finalCustomInstructionForWorker = customInstructionPayloadForWorker; // Already set to the optimized prompt
+            finalCustomInstructionForWorker = customInstructionPayloadForWorker;
         } else if (effectiveMode === "custom") {
             finalCustomInstructionForWorker = customInstructionPayloadForWorker || settings.customInstruction;
         } else {
-            finalCustomInstructionForWorker = ""; // Not a custom mode or analyze_comparison
+            finalCustomInstructionForWorker = "";
         }
         
         const response = await callBackgroundForOptimization(userTextForRequest, effectiveMode, finalCustomInstructionForWorker, isClarifyRequest);
-        
         const displayType = response.type || (isClarifyRequest ? 'clarification' : (['analyze', 'analyze_comparison'].includes(effectiveMode) ? 'analysis' : 'suggestion'));
         
         if (displayType === 'analysis' || displayType === 'clarification') {
-            showSuggestionOverlay(inputElement, response.data, displayType, effectiveMode, originalTextForThisRequestCycle);
+            showSuggestionOverlay(inputElement, buttonElement, response.data, displayType, effectiveMode, originalTextForThisRequestCycle);
         } else if (response.data) {
-            const suggestions = Array.isArray(response.data) ? response.data : [response.data];
+            let suggestions = Array.isArray(response.data) ? response.data : [response.data];
+            suggestions = suggestions.map(s => s.trim().replace(/^"|"$/g, ''));
+
             const validSuggestions = (initialText !== null && effectiveMode !== "analyze_comparison") 
                 ? suggestions 
                 : suggestions.filter(text => text !== userTextForRequest);
             
             if (validSuggestions.length > 0) {
-                showSuggestionOverlay(inputElement, validSuggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
+                showSuggestionOverlay(inputElement, buttonElement, validSuggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
             } else if (suggestions.length > 0 && suggestions[0] === userTextForRequest && initialText === null) { 
-                 showSuggestionOverlay(inputElement, "No significant changes suggested by AI.", 'analysis', effectiveMode, originalTextForThisRequestCycle);
+                 showSuggestionOverlay(inputElement, buttonElement, "No significant changes suggested by AI.", 'analysis', effectiveMode, originalTextForThisRequestCycle);
             } else if (suggestions.length > 0 && initialText !== null) {
-                showSuggestionOverlay(inputElement, suggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
+                showSuggestionOverlay(inputElement, buttonElement, suggestions, 'suggestion', effectiveMode, originalTextForThisRequestCycle);
             } else {
-                showSuggestionOverlay(inputElement, "No different suggestions found or AI returned empty.", 'error', effectiveMode, originalTextForThisRequestCycle);
+                showSuggestionOverlay(inputElement, buttonElement, "No different suggestions found or AI returned empty.", 'error', effectiveMode, originalTextForThisRequestCycle);
             }
         } else {
-             showSuggestionOverlay(inputElement, "Received no data from the AI.", 'error', effectiveMode, originalTextForThisRequestCycle);
+             showSuggestionOverlay(inputElement, buttonElement, "Received no data from the AI.", 'error', effectiveMode, originalTextForThisRequestCycle);
         }
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        const currentModeForError = initialMode || (await getSettings()).mode; // Fallback for error display
-        const originalTextForError = initialText === null ? lastOriginalUserText : originalTextForThisRequestCycle;
+        const currentModeForError = initialMode || (await getSettings()).mode;
+        const originalTextForError = userTextForRequest;
 
         if (errorMsg.includes("Could not establish connection") || errorMsg.includes("Connection failed")) {
-            showSuggestionOverlay(inputElement, "Error: Connection to background service failed. Please reload the page or extension.", 'error', currentModeForError, originalTextForError);
+            showSuggestionOverlay(inputElement, buttonElement, "Error: Connection to background service failed.", 'error', currentModeForError, originalTextForError);
         } else if (errorMsg.includes("Worker URL missing")) {
-             showSuggestionOverlay(inputElement, "Error: Extension configuration issue. Please contact support.", 'error', currentModeForError, originalTextForError);
+             showSuggestionOverlay(inputElement, buttonElement, "Error: Extension configuration issue.", 'error', currentModeForError, originalTextForError);
         } else {
-            showSuggestionOverlay(inputElement, `Operation failed: ${errorMsg}`, 'error', currentModeForError, originalTextForError);
+            showSuggestionOverlay(inputElement, buttonElement, `Operation failed: ${errorMsg}`, 'error', currentModeForError, originalTextForError);
         }
         console.error("[PromptPolish] Operation failed:", error);
     } finally {
-        buttonElement.disabled = false; buttonElement.style.opacity = '1'; buttonElement.style.cursor = 'pointer'; buttonElement.style.pointerEvents = 'auto';
+        buttonElement.disabled = false; buttonElement.style.opacity = '1'; buttonElement.style.cursor = 'pointer';
         if (isFloatingButton) { buttonElement.textContent = originalButtonText; buttonElement.style.backgroundColor = ACCENT_COLOR; buttonElement.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)"; }
         else { buttonElement.innerHTML = originalButtonContent; }
     }
@@ -392,12 +478,24 @@ function injectStyles() {
     const styleSheet = document.createElement("style"); styleSheet.id = styleId;
     styleSheet.textContent = `
         #promptpolish-chatgpt-float-btn { position: fixed; bottom: 20px; right: 25px; z-index: 9999; }
-        #promptpolish-chatgpt-float-btn button { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 500; padding: 8px 16px; border: none; border-radius: 6px; background-color: ${ACCENT_COLOR}; color: #fff; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; pointer-events: auto; }
+        #promptpolish-chatgpt-float-btn button { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 500; padding: 8px 16px; border: none; border-radius: 6px; background-color: ${ACCENT_COLOR}; color: #fff; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
         #promptpolish-chatgpt-float-btn button:hover:not(:disabled) { background-color: ${ACCENT_COLOR_DARK}; box-shadow: 0 4px 8px rgba(0,0,0,0.25); }
-        #promptpolish-chatgpt-float-btn button:disabled { background-color: #aaa; cursor: wait; box-shadow: none; opacity: 0.7; pointer-events: none; }
-        .promptpolish-optimize-btn { position: absolute; width: 22px; height: 22px; border-radius: 4px; border: 1px solid ${BORDER_COLOR}; background-color: #FFFFFF; color: ${TEXT_COLOR_MEDIUM}; cursor: pointer; padding: 0; z-index: 9999; display: none; align-items: center; justify-content: center; line-height: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.2s ease; pointer-events: auto; }
-        .promptpolish-optimize-btn:hover:not(:disabled) { background-color: ${LIGHT_GREY_BG}; border-color: #adb5bd; color: ${ACCENT_COLOR_DARK}; }
-        .promptpolish-optimize-btn:disabled { cursor: wait; opacity: 0.7; pointer-events: none;}
+        #promptpolish-chatgpt-float-btn button:disabled { background-color: #aaa; cursor: wait; box-shadow: none; opacity: 0.7; }
+        .promptpolish-optimize-btn { 
+            position: absolute; width: 22px; height: 22px; border-radius: 4px; border: 1px solid ${BORDER_COLOR}; 
+            background-color: #FFFFFF; color: ${TEXT_COLOR_MEDIUM}; cursor: pointer; padding: 0; z-index: 9999; 
+            display: none; align-items: center; justify-content: center; line-height: 0; 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
+        }
+        .promptpolish-optimize-btn.faded {
+            opacity: 0.3;
+        }
+        .promptpolish-optimize-btn:hover:not(:disabled) { 
+            opacity: 1 !important;
+        }
+        .promptpolish-optimize-btn:disabled { cursor: wait; opacity: 0.7; }
         .promptpolish-analysis-content::-webkit-scrollbar { width: ${SCROLLBAR_WIDTH}; }
         .promptpolish-analysis-content::-webkit-scrollbar-track { background: ${SCROLLBAR_TRACK_COLOR}; border-radius: 3px; }
         .promptpolish-analysis-content::-webkit-scrollbar-thumb { background-color: ${SCROLLBAR_THUMB_COLOR}; border-radius: 3px; border: 1px solid ${SCROLLBAR_TRACK_COLOR}; }
@@ -405,161 +503,140 @@ function injectStyles() {
         .promptpolish-analysis-content { scrollbar-width: thin; scrollbar-color: ${SCROLLBAR_THUMB_COLOR} ${SCROLLBAR_TRACK_COLOR}; }
         .promptpolish-follow-up-btn { background-color: #f0f0f0; color: #333; border: 1px solid #ddd; padding: 4px 8px; font-size: 12px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background-color 0.15s ease; margin-top: 4px; }
         .promptpolish-follow-up-btn:hover { background-color: #e0e0e0; }
-        .promptpolish-follow-up-btn svg { /* SVG styles are inline via innerHTML */ }
+        .promptpolish-retry-btn { background-color: ${ERROR_BG_COLOR}; color: ${ERROR_TEXT_COLOR}; border: 1px solid ${ERROR_BORDER_COLOR}; padding: 4px 10px; font-size: 13px; border-radius: 4px; cursor: pointer; transition: background-color 0.15s ease; margin-top: 8px; }
+        .promptpolish-retry-btn:hover { background-color: #f1c6ca; }
+        .promptpolish-diff-toggle { background: none; border: none; color: ${ACCENT_COLOR_DARK}; font-size: 13px; cursor: pointer; padding: 4px 0; margin: 4px 12px 0; }
+        .promptpolish-diff-view { line-height: 1.6; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+        .promptpolish-diff-view del { background-color: #ffebe9; color: #c0392b; text-decoration: none; }
+        .promptpolish-diff-view ins { background-color: #e6ffed; color: #27ae60; text-decoration: none; }
     `;
     document.head.appendChild(styleSheet);
 }
 
-function isRelevantInput(element) {
-    if (!element || element.closest('#promptpolish-suggestion-overlay')) return false;
-    const hostname = window.location.hostname;
-    try {
-        if (hostname.includes("chat.openai.com")) { if (element.matches('textarea[id="prompt-textarea"], textarea[data-id="root"]')) return true; }
-        else if (hostname.includes("gemini.google.com")) { if (element.matches('div.ql-editor[contenteditable="true"]')) return true; }
-        else if (hostname.includes("claude.ai")) { if (element.matches('div.ProseMirror[contenteditable="true"]')) return true; }
-    } catch (e) { /* Minimal logging */ }
-    const tagName = element.tagName;
-    const isContentEditable = element.isContentEditable;
-    if (tagName === 'TEXTAREA' && !element.readOnly) return isElementVisibleAndSufficientSize(element);
-    if (tagName === 'INPUT') {
-        const type = element.type.toLowerCase();
-        const relevantTypes = ['text', 'search', 'url', 'email', 'tel', 'number'];
-        if (relevantTypes.includes(type) && !element.readOnly) return isElementVisibleAndSufficientSize(element);
+function manageFoundInput(inputElement) {
+    if (!isEnabled || !isRelevantInput(inputElement) || managedInputs.has(inputElement)) {
+        return;
     }
-    if (isContentEditable && (tagName === 'DIV' || tagName === 'P')) return isElementVisibleAndSufficientSize(element);
-    return false;
-}
 
-function isElementVisibleAndSufficientSize(element) {
-    try {
-        const styles = window.getComputedStyle(element);
-        if (!styles || styles.display === 'none' || styles.visibility === 'hidden' || parseFloat(styles.opacity) < 0.1) return false;
-        if (element.offsetWidth < MIN_ELEMENT_WIDTH || element.offsetHeight < MIN_ELEMENT_HEIGHT) {
-            const rect = element.getBoundingClientRect();
-            if (!rect || rect.width < MIN_ELEMENT_WIDTH || rect.height < MIN_ELEMENT_HEIGHT) return false;
+    const button = document.createElement('button');
+    button.type = "button"; 
+    button.innerHTML = MAGIC_WAND_SVG; 
+    button.title = 'Optimize with PromptPolish'; 
+    button.classList.add('promptpolish-optimize-btn');
+    document.body.appendChild(button);
+
+    managedInputs.set(inputElement, { button: button, hideTimeout: null, fadeTimeout: null });
+
+    button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        const managedData = managedInputs.get(inputElement);
+        if (managedData) {
+            if (managedData.hideTimeout) clearTimeout(managedData.hideTimeout);
+            if (managedData.fadeTimeout) clearTimeout(managedData.fadeTimeout);
         }
-        return true;
-    } catch (e) { /* Minimal logging */ return false; }
-}
+        await handleOptimizationRequest(inputElement, button, null, null, null);
+    });
 
-function findAndManageInputs(node) {
-    if (!isEnabled || !node) return;
-    if (node.nodeType === Node.ELEMENT_NODE && isRelevantInput(node)) addOptimizeButtonIfNeeded(node);
-    if (node.querySelectorAll) {
-        const potentialInputs = node.querySelectorAll('textarea, input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="tel"], input[type="number"], div[contenteditable="true"], p[contenteditable="true"]');
-        potentialInputs.forEach(el => { if (isRelevantInput(el)) addOptimizeButtonIfNeeded(el); });
-    }
-}
-const debouncedFindAndManageInputs = debounce(findAndManageInputs, 350);
+    const startFadeTimer = () => {
+        const managedData = managedInputs.get(inputElement);
+        if (!managedData) return;
+        if (managedData.fadeTimeout) clearTimeout(managedData.fadeTimeout);
+        managedData.fadeTimeout = setTimeout(() => {
+            button.classList.add('faded');
+        }, FADE_BUTTON_DELAY);
+    };
 
-function createOptimizeButtonElement(inputElement) {
-    try {
-        const button = document.createElement('button');
-        button.type = "button"; button.innerHTML = MAGIC_WAND_SVG; button.title = 'Optimize with PromptPolish'; button.classList.add('promptpolish-optimize-btn');
-        button.addEventListener('click', async (event) => {
-            event.stopPropagation(); event.preventDefault();
-            clearTimeout(hideButtonTimeout);
-            await handleOptimizationRequest(inputElement, button, null, null, null); 
-        });
-        return button;
-    } catch (error) { console.error("PromptPolish: Failed to create button:", error); return null; }
-}
+    inputElement.addEventListener('focus', () => {
+        const managedData = managedInputs.get(inputElement);
+        if (!managedData) return;
 
-function addOptimizeButtonIfNeeded(inputElement) {
-    if (!isEnabled || managedInputs.has(inputElement)) return;
-    const optimizeButton = createOptimizeButtonElement(inputElement);
-    if (!optimizeButton) return;
-    document.body.appendChild(optimizeButton);
-    managedInputs.set(inputElement, { button: optimizeButton });
-    try { positionButton(optimizeButton, inputElement); }
-    catch (e) { /* Minimal logging */ }
+        if (managedData.hideTimeout) clearTimeout(managedData.hideTimeout);
+        
+        button.classList.remove('faded');
+        if (currentActiveButton && currentActiveButton !== button) {
+            currentActiveButton.style.display = 'none';
+        }
+        positionButton(button, inputElement);
+        button.style.display = 'flex';
+        currentActiveButton = button;
+        startFadeTimer();
+    });
+
+    inputElement.addEventListener('input', () => {
+        const managedData = managedInputs.get(inputElement);
+        if (!managedData) return;
+        button.classList.remove('faded');
+        if (managedData.fadeTimeout) clearTimeout(managedData.fadeTimeout);
+        startFadeTimer();
+    });
+
+    inputElement.addEventListener('blur', () => {
+        const managedData = managedInputs.get(inputElement);
+        if (!managedData) return;
+        
+        if (managedData.fadeTimeout) clearTimeout(managedData.fadeTimeout);
+
+        managedData.hideTimeout = setTimeout(() => {
+            if (document.activeElement !== button && !document.activeElement.closest('#promptpolish-suggestion-overlay')) {
+                 button.style.display = 'none';
+                 if (currentActiveButton === button) {
+                     currentActiveButton = null;
+                 }
+            }
+        }, 150);
+    });
 }
 
 function positionButton(button, inputElement) {
     try {
         const rect = inputElement.getBoundingClientRect();
-        const wasHidden = button.style.display === 'none';
-        if (wasHidden) { button.style.visibility = 'hidden'; button.style.display = 'flex'; }
-        const buttonHeight = button.offsetHeight; const buttonWidth = button.offsetWidth;
-        if (wasHidden) { button.style.display = 'none'; button.style.visibility = 'visible'; }
-        if (!buttonHeight || !buttonWidth) { button.style.display = 'none'; return; }
+        button.style.visibility = 'hidden';
+        button.style.display = 'flex';
+        const buttonHeight = button.offsetHeight; 
+        const buttonWidth = button.offsetWidth;
+        button.style.display = 'none';
+        button.style.visibility = 'visible';
+
+        if (!buttonHeight || !buttonWidth) return;
+        
         const topOffset = Math.max(3, Math.min(5, rect.height / 4));
         const rightOffset = Math.max(3, Math.min(5, rect.width / 10));
+
         let top = rect.top + window.scrollY + topOffset;
         let left = rect.right + window.scrollX - buttonWidth - rightOffset;
-        const viewportWidth = window.innerWidth; const viewportHeight = window.innerHeight;
-        if (left + buttonWidth > viewportWidth + window.scrollX - 5) left = viewportWidth + window.scrollX - buttonWidth - 5;
-        if (left < window.scrollX + 5) left = window.scrollX + 5;
-        if (top + buttonHeight > rect.bottom + window.scrollY - 3) { top = rect.bottom + window.scrollY - buttonHeight - 3; }
-        if (top < rect.top + window.scrollY + 3) { top = rect.top + window.scrollY + 3; }
-        if (top + buttonHeight > viewportHeight + window.scrollY - 5) top = viewportHeight + window.scrollY - buttonHeight - 5;
-        if (top < window.scrollY + 5) top = window.scrollY + 5;
-        button.style.top = `${top}px`; button.style.left = `${left}px`;
-    } catch (error) { console.error("Error positioning button:", error); button.style.display = 'none'; }
+
+        button.style.top = `${top}px`;
+        button.style.left = `${left}px`;
+    } catch (error) {
+        console.error("Error positioning button:", error);
+        button.style.display = 'none';
+    }
 }
 
-document.body.addEventListener('focusin', (event) => {
-    if (!isEnabled) return;
-    clearTimeout(hideButtonTimeout);
-    const target = event.target;
-    if (isRelevantInput(target)) {
-        addOptimizeButtonIfNeeded(target);
-        const managedData = managedInputs.get(target);
-        if (!managedData) return;
-        const { button } = managedData;
-        if (currentOptimizeButton && currentOptimizeButton.button !== button) currentOptimizeButton.button.style.display = 'none';
-        positionButton(button, target);
-        button.style.display = 'flex';
-        currentOptimizeButton = { button: button, inputElement: target };
-    } else {
-         if (currentOptimizeButton && !event.target.closest('.promptpolish-optimize-btn') && !event.target.closest('#promptpolish-suggestion-overlay') && !event.target.closest('.promptpolish-follow-up-btn')) {
-             currentOptimizeButton.button.style.display = 'none';
-             currentOptimizeButton = null;
-         }
-    }
-}, true);
-
-document.body.addEventListener('focusout', (event) => {
-    if (!isEnabled) return;
-    clearTimeout(hideButtonTimeout);
-    const targetLosingFocus = event.target;
-    if (currentOptimizeButton && targetLosingFocus === currentOptimizeButton.inputElement) {
-        const buttonElement = currentOptimizeButton.button;
-        hideButtonTimeout = setTimeout(() => {
-            const newlyFocusedElement = document.activeElement;
-            const focusMovedToButton = buttonElement.contains(newlyFocusedElement);
-            const focusMovedToManaged = isRelevantInput(newlyFocusedElement);
-            const focusMovedToOverlay = newlyFocusedElement?.closest('#promptpolish-suggestion-overlay');
-            const focusMovedToFollowUp = newlyFocusedElement?.closest('.promptpolish-follow-up-btn');
-            if (!focusMovedToButton && !focusMovedToManaged && !focusMovedToOverlay && !focusMovedToFollowUp) {
-                buttonElement.style.display = 'none';
-                if (currentOptimizeButton && currentOptimizeButton.button === buttonElement) currentOptimizeButton = null;
-            }
-        }, 150);
-    }
-}, true);
-
 // ================= Initialization and Control =================
+function findAndManageAllInputs(rootNode = document.body) {
+    if (!isEnabled || !rootNode) return;
+    const potentialInputs = rootNode.querySelectorAll('textarea, input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="tel"], input[type="number"], div[contenteditable="true"], p[contenteditable="true"]');
+    potentialInputs.forEach(manageFoundInput);
+}
+
 function startObserver() {
     if (observer) observer.disconnect();
     observer = new MutationObserver((mutationsList) => {
         if (!isEnabled) return;
-        let potentiallyRelevantChange = false;
         for (const mutation of mutationsList) {
             if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                for (const node of mutation.addedNodes) {
+                mutation.addedNodes.forEach(node => {
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                         if (node.matches('textarea, input, div[contenteditable="true"], p[contenteditable="true"]') || node.querySelector('textarea, input, div[contenteditable="true"], p[contenteditable="true"]')) {
-                             potentiallyRelevantChange = true; break;
-                         }
+                        manageFoundInput(node);
+                        findAndManageAllInputs(node);
                     }
-                }
+                });
             }
-            if (potentiallyRelevantChange) break;
         }
-        if (potentiallyRelevantChange) {
-             debouncedFindAndManageInputs(document.body);
-             if (window.location.hostname.includes("chat.openai.com")) injectFloatingButtonForChatGPT();
+        if (window.location.hostname.includes("chat.openai.com")) {
+            injectFloatingButtonForChatGPT();
         }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -567,11 +644,27 @@ function startObserver() {
 
 function stopObserverAndCleanup() {
     if (observer) { observer.disconnect(); observer = null; }
-    managedInputs.forEach(({ button }) => button.remove());
-    managedInputs.clear();
-    currentOptimizeButton = null;
+    if (currentActiveButton) {
+        currentActiveButton.style.display = 'none';
+        currentActiveButton = null;
+    }
     document.getElementById("promptpolish-chatgpt-float-btn")?.remove();
     hideSuggestionOverlay();
+}
+
+function initializeSingletonClickHandler() {
+    document.addEventListener("click", (e) => {
+        const overlay = document.getElementById("promptpolish-suggestion-overlay");
+        if (!overlay || overlay.style.display === 'none') {
+            return;
+        }
+        const isClickInsideOverlay = overlay.contains(e.target);
+        const isClickOnAnyOptimizeButton = e.target.closest('.promptpolish-optimize-btn, #promptpolish-chatgpt-float-btn button');
+        
+        if (!isClickInsideOverlay && !isClickOnAnyOptimizeButton) {
+            hideSuggestionOverlay();
+        }
+    }, true);
 }
 
 function runInitialization() {
@@ -579,18 +672,24 @@ function runInitialization() {
         console.error("[PromptPolish] Core Chrome APIs unavailable.");
         isEnabled = false; return;
     }
-    chrome.storage.sync.get(["optimizationEnabled"], (data) => {
+
+    chrome.storage.sync.get(["optimizationEnabled", "customRules"], (data) => {
         if (chrome.runtime.lastError) { 
             console.error("[PromptPolish] Storage get error:", chrome.runtime.lastError.message);
             isEnabled = true; 
         } else { 
-            isEnabled = data.optimizationEnabled !== undefined ? data.optimizationEnabled : true;
+            isEnabled = data.optimizationEnabled !== false;
+            customRules = data.customRules || [];
         }
+
         if (isEnabled) {
             injectStyles();
-            findAndManageInputs(document.body);
+            findAndManageAllInputs();
             startObserver();
-            if (window.location.hostname.includes("chat.openai.com")) injectFloatingButtonForChatGPT();
+            initializeSingletonClickHandler();
+            if (window.location.hostname.includes("chat.openai.com")) {
+                injectFloatingButtonForChatGPT();
+            }
         } else {
             stopObserverAndCleanup();
         }
@@ -599,17 +698,27 @@ function runInitialization() {
 
 if (chrome.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'sync' && changes.optimizationEnabled !== undefined) {
+        if (namespace !== 'sync') return;
+
+        if (changes.optimizationEnabled !== undefined) {
             const wasEnabled = isEnabled;
             isEnabled = changes.optimizationEnabled.newValue ?? true;
             if (isEnabled && !wasEnabled) { runInitialization(); }
             else if (!isEnabled && wasEnabled) { stopObserverAndCleanup(); }
         }
+
+        if (changes.customRules !== undefined) {
+            customRules = changes.customRules.newValue || [];
+            if (isEnabled) {
+                findAndManageAllInputs();
+            }
+        }
     });
-} else { console.warn("[PromptPolish] chrome.storage.onChanged API not available."); }
+}
 
 if (document.readyState === 'complete') { runInitialization(); }
 else { window.addEventListener('load', runInitialization, { once: true }); }
+
 
 // ================= Floating Button Logic (ChatGPT Specific) =================
 function injectFloatingButtonForChatGPT() {
@@ -623,14 +732,16 @@ function injectFloatingButtonForChatGPT() {
         button.addEventListener("click", async (e) => {
             e.preventDefault(); e.stopPropagation();
             const currentInputElement = document.querySelector('textarea[id="prompt-textarea"], textarea[data-id="root"]');
-            if (!currentInputElement) { showOverlayNearButton(button, "Could not find the text area to optimize.", 'error', '', ''); return; } // Pass empty originalUserTextForComparison
+            if (!currentInputElement) { 
+                showOverlayNearButton(button, "Could not find the text area to optimize.", 'error'); 
+                return; 
+            }
             await handleOptimizationRequest(currentInputElement, button, null, null, null); 
         });
         floatContainer.appendChild(button); document.body.appendChild(floatContainer);
     }
 }
 
-// Updated to accept and pass originalUserTextForComparison
 function showOverlayNearButton(buttonElement, message, type, originalMode = '', originalUserTextForComparison = '') { 
     const rect = buttonElement.getBoundingClientRect();
     const pseudoInputElement = { 
@@ -638,5 +749,5 @@ function showOverlayNearButton(buttonElement, message, type, originalMode = '', 
         isContentEditable: false, 
         value: '' 
     };
-    showSuggestionOverlay(pseudoInputElement, message, type, originalMode, originalUserTextForComparison);
+    showSuggestionOverlay(pseudoInputElement, buttonElement, message, type, originalMode, originalUserTextForComparison);
 }

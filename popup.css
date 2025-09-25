@@ -1,176 +1,250 @@
-    /* Define CSS Variables for easier theme management */
-    :root {
-        --font-family: 'Inter', sans-serif;
-        /* --- Updated Colors --- */
-        --background-color: #F8FAFC; /* Slightly off-white background */
-        --header-gradient-start: #44BC95; /* Vibrant Green */
-        --header-gradient-end: #3DAA86; /* Darker Green */
-        --header-text-color: #FFFFFF; /* White text for header */
-        --text-color: #1E293B; /* Slightly darker main text */
-        --label-color: #475569; /* Adjusted label color */
-        --border-color: #E2E8F0; /* Slightly adjusted border */
-        --accent-color: #44BC95; /* Keep accent for toggle/focus */
-        --accent-color-dark: #3DAA86;
-        --disabled-color: #F1F5F8;
-        --focus-shadow: rgba(68, 188, 149, 0.25);
-        --body-padding: 18px; /* Adjusted padding */
-        --border-radius: 8px;
-        --element-spacing: 16px; /* Adjusted spacing */
-    }
+/* Define CSS Variables for easier theme management */
+:root {
+    --font-family: 'Inter', sans-serif;
+    --background-color: #F8FAFC;
+    --header-gradient-start: #44BC95;
+    --header-gradient-end: #3DAA86;
+    --header-text-color: #FFFFFF;
+    --text-color: #1E293B;
+    --label-color: #475569;
+    --border-color: #E2E8F0;
+    --accent-color: #44BC95;
+    --accent-color-dark: #3DAA86;
+    --disabled-color: #F1F5F8;
+    --focus-shadow: rgba(68, 188, 149, 0.25);
+    --error-color: #e53e3e;
+    --body-padding: 18px;
+    --border-radius: 8px;
+    --element-spacing: 16px;
+}
 
-    /* Base Body Styles */
-    body {
-        font-family: var(--font-family);
-        width: 340px;
-        padding: 0; /* Remove body padding, apply to container */
-        background-color: var(--background-color); /* Use new background */
-        color: var(--text-color);
-        font-size: 14px;
-        line-height: 1.5;
-        box-sizing: border-box;
-        margin: 0;
-    }
+/* Base Body Styles */
+body {
+    font-family: var(--font-family);
+    width: 380px; /* Increased width for new section */
+    padding: 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.5;
+    box-sizing: border-box;
+    margin: 0;
+}
 
-    /* Main Popup Container */
-    .popup-container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--element-spacing);
-        padding: var(--body-padding); /* Add padding here */
-    }
+/* Main Popup Container */
+.popup-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-spacing);
+    padding: var(--body-padding);
+}
 
-    /* Header Styles */
-    .header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 16px var(--body-padding); /* Add more padding */
-        margin: 0 calc(-1 * var(--body-padding)); /* Extend to edges */
-        margin-bottom: 4px; /* Space below header */
-        /* --- Added Gradient Background --- */
-        background-image: linear-gradient(to right, var(--header-gradient-start), var(--header-gradient-end));
-        color: var(--header-text-color); /* White text on gradient */
-        border-bottom: 1px solid var(--accent-color-dark); /* Add subtle border */
-    }
+/* Header Styles */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px var(--body-padding);
+    margin: 0 calc(-1 * var(--body-padding));
+    margin-bottom: 4px;
+    background-image: linear-gradient(to right, var(--header-gradient-start), var(--header-gradient-end));
+    color: var(--header-text-color);
+    border-bottom: 1px solid var(--accent-color-dark);
+}
 
-    .logo {
-        width: 32px;
-        height: 32px;
-        /* Optional: Add slight drop shadow if needed on complex backgrounds */
-        /* filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2)); */
-    }
+.logo {
+    width: 32px;
+    height: 32px;
+}
 
-    .header h2 { /* Target h2 specifically within header */
-        font-size: 19px;
-        font-weight: 600;
-        margin: 0;
-        color: var(--header-text-color); /* Ensure header text is white */
-    }
+.header h2 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--header-text-color);
+}
 
-    /* Styling for each setting row */
-    .setting-row {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
+/* Styling for each setting row */
+.setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 
-    /* Specific layout for toggle row */
-    .toggle-container {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-        padding: 6px 0;
-        /* Add subtle border top/bottom for separation */
-        border-top: 1px solid var(--border-color);
-        border-bottom: 1px solid var(--border-color);
-        margin-top: 4px; /* Add some space above toggle */
-    }
+.toggle-container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+}
 
-    /* Label Styles */
-    .setting-label {
-        font-weight: 500;
-        font-size: 14px;
-        color: var(--label-color);
-    }
+/* Label Styles */
+.setting-label {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--label-color);
+}
 
-    /* Modern Toggle Switch Styles */
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 44px;
-        height: 24px;
-    }
+/* Modern Toggle Switch Styles */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
 
-    .switch input { opacity: 0; width: 0; height: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
 
-    .slider {
-        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-        background-color: #CBD5E1; /* Use a neutral grey for off state */
-        transition: .4s;
-    }
+.slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #CBD5E1;
+    transition: .4s;
+}
 
-    .slider:before {
-        position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
-        background-color: white;
-        transition: .4s;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
+.slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
 
-    /* Use accent color for ON state */
-    input:checked + .slider { background-color: var(--accent-color); }
-    input:focus + .slider { box-shadow: 0 0 1px var(--accent-color); }
-    input:checked + .slider:before { transform: translateX(20px); }
+input:checked + .slider { background-color: var(--accent-color); }
+input:focus + .slider { box-shadow: 0 0 1px var(--accent-color); }
+input:checked + .slider:before { transform: translateX(20px); }
 
-    /* Rounded sliders */
-    .slider.round { border-radius: 24px; }
-    .slider.round:before { border-radius: 50%; }
+.slider.round { border-radius: 24px; }
+.slider.round:before { border-radius: 50%; }
 
-    /* Select Dropdown and Textarea Styles */
-    select, textarea {
-        width: 100%;
-        padding: 10px 14px;
-        border-radius: var(--border-radius);
-        border: 1px solid var(--border-color);
-        font-size: 14px;
-        font-family: var(--font-family);
-        color: var(--text-color);
-        background-color: #FFFFFF; /* Keep inputs white for contrast */
-        box-sizing: border-box;
-        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-        appearance: none; -webkit-appearance: none; -moz-appearance: none;
-    }
+/* Select Dropdown and Textarea Styles */
+select, textarea, .rule-form input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    font-size: 14px;
+    font-family: var(--font-family);
+    color: var(--text-color);
+    background-color: #FFFFFF;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
 
-    /* Custom dropdown arrow for select */
-    select {
-        background-image: url('data:image/svg+xml;utf8,<svg fill="%234A5C6A" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
-        background-repeat: no-repeat;
-        background-position: right 12px center;
-        background-size: 20px;
-        padding-right: 40px;
-    }
+select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%234A5C6A" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 20px;
+    padding-right: 40px;
+}
 
-    /* Focus States using accent color */
-    select:focus, textarea:focus {
-        border-color: var(--accent-color);
-        box-shadow: 0 0 0 3px var(--focus-shadow);
-        outline: none;
-    }
+select:focus, textarea:focus, .rule-form input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--focus-shadow);
+    outline: none;
+}
 
-    /* Textarea Specifics */
-    textarea {
-        min-height: 80px;
-        resize: vertical;
-        line-height: 1.5;
-    }
+textarea {
+    min-height: 80px;
+    resize: vertical;
+    line-height: 1.5;
+}
 
-    textarea::placeholder { color: #94A3B8; font-size: 14px; } /* Adjusted placeholder */
+/* Divider */
+.divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 8px 0;
+}
 
-    /* Disabled state styling */
-    select:disabled, textarea:disabled {
-        background-color: var(--disabled-color);
-        cursor: not-allowed;
-        opacity: 0.7;
-    }
+/* Rules Section */
+.rules-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
 
-    /* Utility class to hide elements */
-    .hidden { display: none !important; }
+.rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+#addRuleBtn {
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--border-radius);
+    background-color: var(--accent-color);
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#addRuleBtn:hover {
+    background-color: var(--accent-color-dark);
+}
+
+.rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.rule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 13px;
+}
+
+.rule-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    word-break: break-all;
+}
+
+.rule-details strong {
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.rule-details code {
+    font-family: monospace;
+    background-color: #f1f1f1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.delete-rule-btn {
+    background: none;
+    border: none;
+    color: var(--label-color);
+    cursor: pointer;
+    padding: 4px;
+    margin-left: 10px;
+    line-height: 0;
+    border-radius: 50%;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.delete-rule-btn:hover {
+    color: var(--error-color);
+    background-color: #fef2f2;
+}
+
+/* Utility class to hide elements */
+.hidden { display: none !important; }

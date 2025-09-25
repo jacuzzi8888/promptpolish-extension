@@ -17,6 +17,7 @@
             <h2>PromptPolish</h2>
         </div>
 
+        <!-- Main Settings -->
         <div class="setting-row toggle-container">
              <label for="toggleOptimization" class="setting-label">Enable Optimization</label>
              <label class="switch">
@@ -45,7 +46,23 @@
 
         <div class="setting-row custom-instruction-container hidden">
             <label for="customInstruction" class="setting-label">Custom Instruction</label>
-            <textarea id="customInstruction" placeholder="Enter custom optimization instructions... (used only when 'Custom' mode is selected)"></textarea>
+            <textarea id="customInstruction" placeholder="Enter custom optimization instructions..."></textarea>
+        </div>
+
+        <!-- Horizontal Divider -->
+        <hr class="divider">
+
+        <!-- Custom Targeting Rules Section -->
+        <div class="rules-section">
+            <h3>Custom Targeting Rules</h3>
+            <div class="rule-form">
+                <input type="text" id="ruleDomain" placeholder="Domain (e.g., example.com)">
+                <input type="text" id="ruleSelector" placeholder="CSS Selector (e.g., #my-textarea)">
+                <button id="addRuleBtn">Add Rule</button>
+            </div>
+            <div id="rulesList" class="rules-list">
+                <!-- Rules will be dynamically inserted here -->
+            </div>
         </div>
 
     </div>
