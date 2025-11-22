@@ -1,127 +1,118 @@
-// promptpolish/popup.js
+/* popup.js - PromptPolish Settings UI (Cyber-Organic Version) */
 
-document.addEventListener("DOMContentLoaded", function () {
-    // --- Get references to UI elements ---
-    const toggleOptimization = document.getElementById("toggleOptimization");
-    const toggleAutoClarify = document.getElementById("toggleAutoClarify");
-    const modeSelect = document.getElementById("optimizationMode");
-    const customInstructionContainer = document.querySelector(".custom-instruction-container");
-    const customInstructionInput = document.getElementById("customInstruction");
-    
-    // New elements for custom rules
-    const addRuleBtn = document.getElementById("addRuleBtn");
-    const ruleDomainInput = document.getElementById("ruleDomain");
-    const ruleSelectorInput = document.getElementById("ruleSelector");
-    const rulesListContainer = document.getElementById("rulesList");
+const els = {
+  optEnabled: document.getElementById('optEnabled'),
+  autoClarify: document.getElementById('autoClarify'),
+  modeBtns: document.querySelectorAll('.mode-btn'),
+  customContainer: document.getElementById('customRulesContainer'),
+  customInstruction: document.getElementById('customInstruction'),
+  openSettings: document.getElementById('openSettings'),
+};
 
-    // --- Helper Functions ---
-    function toggleCustomInstructionVisibility() {
-        const selectedMode = modeSelect.value;
-        customInstructionContainer.classList.toggle("hidden", selectedMode !== "custom");
-        customInstructionInput.disabled = selectedMode !== "custom";
+// Debounce utility
+function debounce(fn, delay) {
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// Update UI state based on mode
+function updateModeUI(selectedMode) {
+  // Update buttons
+  els.modeBtns.forEach(btn => {
+    if (btn.dataset.value === selectedMode) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
     }
+  });
 
-    function updateDependentControlsState() {
-        const isEnabled = toggleOptimization.checked;
-        modeSelect.disabled = !isEnabled;
-        toggleAutoClarify.disabled = !isEnabled;
-        toggleCustomInstructionVisibility(); 
-        if (!isEnabled) {
-             customInstructionInput.disabled = true;
-        }
+  // Show/hide custom rules
+  if (selectedMode === 'custom') {
+    els.customContainer.classList.add('show');
+  } else {
+    els.customContainer.classList.remove('show');
+  }
+}
+
+// Load settings from storage
+function load() {
+  chrome.storage.sync.get(
+    ['optimizationEnabled', 'autoClarifyEnabled', 'optimizationMode', 'customInstruction'],
+    (data) => {
+      if (chrome.runtime.lastError) {
+        console.error('[PromptPolish] Load error:', chrome.runtime.lastError);
+        return;
+      }
+
+      // Toggles
+      if (els.optEnabled) els.optEnabled.checked = data.optimizationEnabled !== false; // Default true
+      if (els.autoClarify) els.autoClarify.checked = data.autoClarifyEnabled !== false; // Default true
+
+      // Mode
+      const currentMode = data.optimizationMode || 'concise';
+      updateModeUI(currentMode);
+
+      // Custom Instruction
+      if (els.customInstruction) els.customInstruction.value = data.customInstruction || '';
     }
+  );
+}
 
-    // --- Custom Rules Logic ---
-    function renderRules(rules = []) {
-        rulesListContainer.innerHTML = ''; // Clear existing list
-        if (rules.length === 0) {
-            rulesListContainer.innerHTML = '<p style="color: #64748b; font-size: 13px;">No custom rules added yet.</p>';
-            return;
-        }
-        rules.forEach((rule, index) => {
-            const ruleItem = document.createElement('div');
-            ruleItem.className = 'rule-item';
-            ruleItem.innerHTML = `
-                <div class="rule-details">
-                    <strong>${rule.domain}</strong>
-                    <code>${rule.selector}</code>
-                </div>
-                <button class="delete-rule-btn" data-index="${index}" title="Delete Rule">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
-            `;
-            rulesListContainer.appendChild(ruleItem);
-        });
+// Save settings to storage
+function save() {
+  const activeBtn = document.querySelector('.mode-btn.active');
+  const currentMode = activeBtn ? activeBtn.dataset.value : 'concise';
+
+  const payload = {
+    optimizationEnabled: els.optEnabled ? els.optEnabled.checked : true,
+    autoClarifyEnabled: els.autoClarify ? els.autoClarify.checked : true,
+    optimizationMode: currentMode,
+    customInstruction: els.customInstruction ? els.customInstruction.value.trim() : '',
+  };
+
+  chrome.storage.sync.set(payload, () => {
+    if (chrome.runtime.lastError) {
+      console.error('[PromptPolish] Save error:', chrome.runtime.lastError);
+    } else {
+      // Optional: Add subtle visual feedback if needed
+      // console.log('Settings saved');
     }
+  });
+}
 
-    async function saveRules(rules) {
-        await chrome.storage.sync.set({ customRules: rules });
-        renderRules(rules);
-    }
+const autoSaveText = debounce(save, 800);
 
-    addRuleBtn.addEventListener('click', async () => {
-        const domain = ruleDomainInput.value.trim();
-        const selector = ruleSelectorInput.value.trim();
+// Event Listeners
+document.addEventListener('DOMContentLoaded', load);
 
-        if (!domain || !selector) {
-            alert("Both domain and selector fields are required.");
-            return;
-        }
+// Toggles (Save immediately)
+if (els.optEnabled) els.optEnabled.addEventListener('change', save);
+if (els.autoClarify) els.autoClarify.addEventListener('change', save);
 
-        const { customRules = [] } = await chrome.storage.sync.get("customRules");
-        customRules.push({ domain, selector });
-        await saveRules(customRules);
-
-        // Clear input fields
-        ruleDomainInput.value = '';
-        ruleSelectorInput.value = '';
-    });
-
-    rulesListContainer.addEventListener('click', async (event) => {
-        const deleteButton = event.target.closest('.delete-rule-btn');
-        if (deleteButton) {
-            const indexToDelete = parseInt(deleteButton.dataset.index, 10);
-            const { customRules = [] } = await chrome.storage.sync.get("customRules");
-            customRules.splice(indexToDelete, 1);
-            await saveRules(customRules);
-        }
-    });
-
-    // --- Load saved settings from chrome.storage.sync ---
-    chrome.storage.sync.get(
-        ["optimizationEnabled", "autoClarifyEnabled", "optimizationMode", "customInstruction", "customRules"], 
-        function (data) {
-            toggleOptimization.checked = data.optimizationEnabled !== false; 
-            toggleAutoClarify.checked = data.autoClarifyEnabled !== false;
-            
-            const validModes = ["concise", "creative", "formal", "analyze", "custom"];
-            modeSelect.value = (data.optimizationMode && validModes.includes(data.optimizationMode)) ? data.optimizationMode : "concise";
-            
-            customInstructionInput.value = data.customInstruction || "";
-
-            updateDependentControlsState();
-            renderRules(data.customRules || []);
-        }
-    );
-
-    // --- Event Listeners for Main Settings ---
-    toggleOptimization.addEventListener("change", function () {
-        chrome.storage.sync.set({ optimizationEnabled: this.checked });
-        updateDependentControlsState();
-    });
-
-    toggleAutoClarify.addEventListener("change", function () {
-        chrome.storage.sync.set({ autoClarifyEnabled: this.checked });
-    });
-
-    modeSelect.addEventListener("change", function () {
-        chrome.storage.sync.set({ optimizationMode: this.value });
-        toggleCustomInstructionVisibility();
-    });
-
-    customInstructionInput.addEventListener("input", function () {
-        if (modeSelect.value === "custom" && !this.disabled) {
-             chrome.storage.sync.set({ customInstruction: this.value });
-        }
-    });
+// Mode Buttons
+els.modeBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    updateModeUI(btn.dataset.value);
+    save();
+  });
 });
+
+// Custom Instruction (Debounced save)
+if (els.customInstruction) {
+  els.customInstruction.addEventListener('input', autoSaveText);
+}
+
+// Settings Link
+if (els.openSettings) {
+  els.openSettings.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (chrome.runtime.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+    } else {
+      window.open(chrome.runtime.getURL('options.html'));
+    }
+  });
+}
