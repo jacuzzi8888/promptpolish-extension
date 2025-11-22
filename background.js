@@ -105,7 +105,10 @@ function normalizeWorkerResponse(raw) {
   }
 
   // Unrecognized format
-  return { success: false, error: "Upstream returned an unrecognized format." };
+  return {
+    success: false,
+    error: (raw && raw.error) ? (typeof raw.error === 'string' ? raw.error : JSON.stringify(raw.error)) : "Upstream returned an unrecognized format."
+  };
 }
 
 // ================== Build Request Body ==================

@@ -43,8 +43,13 @@ export default {
             }
 
             // Call Gemini API
-            const apiKey = "AIzaSyA4WxbQ2ba5EaWXivIYM9-2g9d4SyFZbOw"; // Hardcoded for debugging
-            // const apiKey = env.GEMINI_API_KEY;
+            // const apiKey = "AIzaSyA4WxbQ2ba5EaWXivIYM9-2g9d4SyFZbOw"; // Hardcoded for debugging
+            const apiKey = env.GEMINI_API_KEY;
+
+            if (!apiKey) {
+                throw new Error("Configuration Error: GEMINI_API_KEY is missing in worker environment.");
+            }
+
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
             const payload = {
@@ -69,7 +74,9 @@ export default {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || "Gemini API error");
+                const errorMessage = data.error?.message || "Gemini API error";
+                console.error("Gemini API Failed:", JSON.stringify(data));
+                throw new Error(`Gemini API Error: ${errorMessage}`);
             }
 
             let optimizedText = data.candidates[0].content.parts[0].text;
@@ -86,6 +93,7 @@ export default {
             });
 
         } catch (error) {
+            console.error("Worker Error:", error.message);
             return new Response(JSON.stringify({ success: false, error: error.message }), {
                 status: 500,
                 headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
