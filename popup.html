@@ -50,29 +50,58 @@
         <span>Creative</span>
       </button>
 
-      <!-- Formal -->
-      <button class="mode-btn" data-value="formal" aria-label="Formal Mode">
+      <!-- Professional -->
+      <button class="mode-btn" data-value="professional" aria-label="Professional Mode">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-linecap="round" stroke-linejoin="round">
           <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
           <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
         </svg>
-        <span>Formal</span>
+        <span>Professional</span>
       </button>
 
-      <!-- Analyze -->
-      <button class="mode-btn" data-value="analyze" aria-label="Analyze Mode">
+      <!-- Casual -->
+      <button class="mode-btn" data-value="casual" aria-label="Casual Mode">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-linecap="round" stroke-linejoin="round">
-          <path d="M2 22h20" />
-          <path d="M14.6 9.5a3 3 0 0 0-4.2 0L9 10.9a3 3 0 0 0 4.2 4.2l1.4-1.4" />
-          <path d="M9 22v-3" />
-          <path d="M15 22v-3" />
-          <path d="M12 17v-2" />
-          <path d="M12 12V2" />
-          <path d="m7 7 5-5 5 5" />
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
-        <span>Analyze</span>
+        <span>Casual</span>
+      </button>
+
+      <!-- Persuasive -->
+      <button class="mode-btn" data-value="persuasive" aria-label="Persuasive Mode">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" />
+          <path d="M8.5 8.5v.01" />
+          <path d="M16 15.5v.01" />
+          <path d="M12 12v.01" />
+        </svg>
+        <span>Persuasive</span>
+      </button>
+
+      <!-- Synthesizer -->
+      <button class="mode-btn" data-value="synthesizer" aria-label="Synthesizer Mode">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+        </svg>
+        <span>Synthesizer</span>
+      </button>
+
+      <!-- Debugger -->
+      <button class="mode-btn" data-value="debugger" aria-label="Debugger Mode">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
+        </svg>
+        <span>Debugger</span>
       </button>
 
       <!-- Custom -->
@@ -96,8 +125,23 @@
     </div>
   </div>
 
+  <!-- Deep Polish Toggle -->
+  <div class="card animate-enter delay-2">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div class="status-label">Deep Polish (CoT)</div>
+        <div class="status-sub">Slower, higher quality reasoning</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="deepPolishToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
   <!-- Settings Card -->
   <div class="card animate-enter delay-3">
+    <!-- Auto-Clarify -->
     <div class="status-card" style="background:none; border:none; padding:0;">
       <div>
         <div class="status-label" style="font-size:13px;">Auto-Clarify</div>
@@ -107,6 +151,25 @@
         <input type="checkbox" id="autoClarify">
         <span class="slider"></span>
       </label>
+    </div>
+
+    <!-- Domain Whitelist -->
+    <div class="status-card" style="background:none; border:none; padding:0; margin-top:16px;">
+      <div>
+        <div class="status-label" style="font-size:13px;">Domain Whitelist</div>
+        <div class="status-sub">Only enable on specific websites</div>
+      </div>
+      <label class="toggle-switch" style="transform:scale(0.8); transform-origin:right center;">
+        <input type="checkbox" id="whitelistEnabled">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- Whitelist Domains Input -->
+    <div id="whitelistDomainsContainer" style="display:none; margin-top:12px;">
+      <textarea id="whitelistDomains" placeholder="chatgpt.com&#10;*.openai.com&#10;claude.ai&#10;gemini.google.com"
+        rows="4"></textarea>
+      <div class="whitelist-hint">One domain per line. Use * for wildcards.</div>
     </div>
   </div>
 

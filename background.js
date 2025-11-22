@@ -109,19 +109,17 @@ function normalizeWorkerResponse(raw) {
 }
 
 // ================== Build Request Body ==================
-function buildBody(inputText, mode, customInstruction, isClarifyRequest) {
+function buildBody(inputText, mode, customInstruction, isClarifyRequest, deepPolish) {
   return {
-    intent: "rewrite",
     inputText: sanitizeInput(inputText),
-    userPrompt: sanitizeInput(inputText),
     mode: sanitizeInput(mode),
     customInstruction: sanitizeInput(customInstruction || ""),
-    isClarifyRequest: !!isClarifyRequest
+    deepPolish: !!deepPolish
   };
 }
 
 // ================== Worker Call with Timeout ==================
-async function processTextWithWorker(inputText, mode, customInstruction, isClarifyRequest) {
+async function processTextWithWorker(inputText, mode, customInstruction, isClarifyRequest, deepPolish) {
   // Validate worker URL
   if (!CLOUDFLARE_WORKER_URL || CLOUDFLARE_WORKER_URL === "YOUR_WORKER_URL_HERE") {
     return {
@@ -146,7 +144,7 @@ async function processTextWithWorker(inputText, mode, customInstruction, isClari
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(buildBody(inputText, mode, customInstruction, isClarifyRequest)),
+      body: JSON.stringify(buildBody(inputText, mode, customInstruction, isClarifyRequest, deepPolish)),
       signal: controller.signal
     });
 
@@ -164,7 +162,7 @@ async function processTextWithWorker(inputText, mode, customInstruction, isClari
         return { success: false, error: "Rate limit exceeded. Please try again later." };
       }
       if (res.status >= 500) {
-        return { success: false, error: "Server error. Please try again later." };
+        return { success: false, error: normalized.error || "Server error. Please try again later." };
       }
       return {
         success: false,
@@ -209,6 +207,7 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
     const mode = (payload.mode || "concise").toString();
     const customInstruction = (payload.customInstruction || "").toString();
     const isClarifyRequest = !!payload.isClarifyRequest;
+    const deepPolish = !!payload.deepPolish;
 
     // Basic validation
     if (!inputText && mode !== "analyze" && mode !== "clarify" && mode !== "analyze_comparison") {
@@ -222,7 +221,8 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
           inputText,
           mode,
           customInstruction,
-          isClarifyRequest
+          isClarifyRequest,
+          deepPolish
         );
 
         // Always send our contract to the content script

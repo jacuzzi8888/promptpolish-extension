@@ -154,7 +154,7 @@ input:checked+.slider:before {
 /* Mode Selector - Icon Row */
 .mode-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -282,4 +282,32 @@ textarea:focus {
 .delay-3 {
   animation-delay: 0.3s;
   opacity: 0;
+}
+
+/* Whitelist Domain Input */
+#whitelistDomains {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-main);
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  resize: vertical;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+#whitelistDomains:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.whitelist-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-style: italic;
 }

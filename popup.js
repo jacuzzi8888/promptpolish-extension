@@ -3,10 +3,14 @@
 const els = {
   optEnabled: document.getElementById('optEnabled'),
   autoClarify: document.getElementById('autoClarify'),
+  whitelistEnabled: document.getElementById('whitelistEnabled'),
+  whitelistDomains: document.getElementById('whitelistDomains'),
+  whitelistContainer: document.getElementById('whitelistDomainsContainer'),
   modeBtns: document.querySelectorAll('.mode-btn'),
   customContainer: document.getElementById('customRulesContainer'),
   customInstruction: document.getElementById('customInstruction'),
   openSettings: document.getElementById('openSettings'),
+  deepPolish: document.getElementById('deepPolishToggle'),
 };
 
 // Debounce utility
@@ -37,10 +41,17 @@ function updateModeUI(selectedMode) {
   }
 }
 
+// Toggle whitelist container visibility
+function toggleWhitelistContainer() {
+  if (els.whitelistEnabled && els.whitelistContainer) {
+    els.whitelistContainer.style.display = els.whitelistEnabled.checked ? 'block' : 'none';
+  }
+}
+
 // Load settings from storage
 function load() {
   chrome.storage.sync.get(
-    ['optimizationEnabled', 'autoClarifyEnabled', 'optimizationMode', 'customInstruction'],
+    ['optimizationEnabled', 'autoClarifyEnabled', 'optimizationMode', 'customInstruction', 'whitelistEnabled', 'whitelistDomains', 'deepPolish'],
     (data) => {
       if (chrome.runtime.lastError) {
         console.error('[PromptPolish] Load error:', chrome.runtime.lastError);
@@ -50,6 +61,11 @@ function load() {
       // Toggles
       if (els.optEnabled) els.optEnabled.checked = data.optimizationEnabled !== false; // Default true
       if (els.autoClarify) els.autoClarify.checked = data.autoClarifyEnabled !== false; // Default true
+      if (els.whitelistEnabled) {
+        els.whitelistEnabled.checked = data.whitelistEnabled || false; // Default false
+        toggleWhitelistContainer();
+      }
+      if (els.deepPolish) els.deepPolish.checked = data.deepPolish || false; // Default false
 
       // Mode
       const currentMode = data.optimizationMode || 'concise';
@@ -57,6 +73,11 @@ function load() {
 
       // Custom Instruction
       if (els.customInstruction) els.customInstruction.value = data.customInstruction || '';
+
+      // Whitelist Domains
+      if (els.whitelistDomains) {
+        els.whitelistDomains.value = data.whitelistDomains || 'chatgpt.com\n*.openai.com\nclaude.ai\ngemini.google.com';
+      }
     }
   );
 }
@@ -69,16 +90,16 @@ function save() {
   const payload = {
     optimizationEnabled: els.optEnabled ? els.optEnabled.checked : true,
     autoClarifyEnabled: els.autoClarify ? els.autoClarify.checked : true,
+    whitelistEnabled: els.whitelistEnabled ? els.whitelistEnabled.checked : false,
+    whitelistDomains: els.whitelistDomains ? els.whitelistDomains.value.trim() : '',
     optimizationMode: currentMode,
     customInstruction: els.customInstruction ? els.customInstruction.value.trim() : '',
+    deepPolish: els.deepPolish ? els.deepPolish.checked : false,
   };
 
   chrome.storage.sync.set(payload, () => {
     if (chrome.runtime.lastError) {
       console.error('[PromptPolish] Save error:', chrome.runtime.lastError);
-    } else {
-      // Optional: Add subtle visual feedback if needed
-      // console.log('Settings saved');
     }
   });
 }
@@ -91,6 +112,13 @@ document.addEventListener('DOMContentLoaded', load);
 // Toggles (Save immediately)
 if (els.optEnabled) els.optEnabled.addEventListener('change', save);
 if (els.autoClarify) els.autoClarify.addEventListener('change', save);
+if (els.whitelistEnabled) {
+  els.whitelistEnabled.addEventListener('change', () => {
+    toggleWhitelistContainer();
+    save();
+  });
+}
+if (els.deepPolish) els.deepPolish.addEventListener('change', save);
 
 // Mode Buttons
 els.modeBtns.forEach(btn => {
@@ -103,6 +131,11 @@ els.modeBtns.forEach(btn => {
 // Custom Instruction (Debounced save)
 if (els.customInstruction) {
   els.customInstruction.addEventListener('input', autoSaveText);
+}
+
+// Whitelist Domains (Debounced save)
+if (els.whitelistDomains) {
+  els.whitelistDomains.addEventListener('input', autoSaveText);
 }
 
 // Settings Link

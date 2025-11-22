@@ -410,15 +410,20 @@ function isRelevantInput(el) {
 
 // ---------- MANAGE INPUT + FAB ----------
 function manageFoundInput(inputElement) {
-  if (!isEnabled || !isRelevantInput(inputElement) || managedInputs.has(inputElement))
+  console.log('[PromptPolish] manageFoundInput called for:', inputElement.tagName, 'isEnabled:', isEnabled);
+  if (!isEnabled || !isRelevantInput(inputElement) || managedInputs.has(inputElement)) {
+    console.log('[PromptPolish] Skipping input. isEnabled:', isEnabled, 'isRelevant:', isRelevantInput(inputElement), 'alreadyManaged:', managedInputs.has(inputElement));
     return;
+  }
 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "promptpolish-fab";
   button.innerHTML = MAGIC_WAND_SVG;
   button.setAttribute('title', 'Optimize prompt (Ctrl+Shift+P)');
+  button.style.display = 'none'; // Start hidden, show on focus
   document.body.appendChild(button);
+  console.log('[PromptPolish] FAB button created and appended to body');
 
   const undoBtn = document.createElement("button");
   undoBtn.type = "button";
@@ -528,22 +533,46 @@ async function handleOptimizationRequest(inputEl, button, undoBtn, text) {
       return;
     }
 
-if (resp && resp.success && resp.data) {
-  // Show preview popup instead of directly replacing
-  createPreviewPopup(inputEl, resp.data);
-} else {
-  const errorMsg = resp?.error || 'Optimization failed';
-  showToast(errorMsg, 'error');
-  console.warn("[PromptPolish] optimization failed:", resp?.error);
-}
+    lastApiCall = now;
+
+    // Get Settings (Mode & Deep Polish)
+    let deepPolish = false;
+    let optimizationMode = 'concise';
+    try {
+      const settings = await chrome.storage.sync.get(['deepPolish', 'optimizationMode']);
+      deepPolish = settings.deepPolish || false;
+      optimizationMode = settings.optimizationMode || 'concise';
+    } catch (e) {
+      console.warn('[PromptPolish] Failed to get settings:', e);
+    }
+
+    // Send optimization request to background script
+    const resp = await chrome.runtime.sendMessage({
+      type: 'optimizeText',
+      payload: {
+        inputText: text,
+        mode: optimizationMode,
+        customInstruction: Array.isArray(customRules) ? customRules.join('\n') : '',
+        deepPolish: deepPolish
+      }
+    });
+
+    if (resp && resp.success && resp.data) {
+      // Show preview popup instead of directly replacing
+      createPreviewPopup(inputEl, resp.data);
+    } else {
+      const errorMsg = resp?.error || 'Optimization failed';
+      showToast(errorMsg, 'error');
+      console.warn("[PromptPolish] optimization failed:", resp?.error);
+    }
   } catch (e) {
-  showToast(e.message || 'Network error occurred', 'error');
-  console.error("[PromptPolish] optimization error:", e);
-} finally {
-  button.disabled = false;
-  button.classList.remove('loading');
-  button.innerHTML = MAGIC_WAND_SVG;
-}
+    showToast(e.message || 'Network error occurred', 'error');
+    console.error("[PromptPolish] optimization error:", e);
+  } finally {
+    button.disabled = false;
+    button.classList.remove('loading');
+    button.innerHTML = MAGIC_WAND_SVG;
+  }
 }
 
 // ---------- KEYBOARD SHORTCUT ----------
